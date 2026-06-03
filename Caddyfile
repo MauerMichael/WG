@@ -1,0 +1,24 @@
+# Caddy 2 — Reverse-Proxy mit automatischem Let's-Encrypt-Cert.
+#
+# Hostname: VPS-Default-Hostname von Hostinger. DNS dafuer ist schon
+# eingerichtet (du erreichst die VPS unter dieser Adresse), also kriegt Caddy
+# beim ersten Start automatisch ein gueltiges Zertifikat.
+# Wenn du spaeter eine eigene Subdomain (z.B. wg.deinedomain.de) nutzen
+# willst: A-Record auf die VPS-IP setzen, hier oben den Hostnamen austauschen,
+# `docker compose restart caddy`.
+
+srv1368949.hstgr.cloud {
+    encode gzip
+    reverse_proxy app:8000
+
+    # Sicherheits-Header.
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        Referrer-Policy strict-origin-when-cross-origin
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        # CSP minimal: HTMX + Google-OAuth-Redirect erlauben.
+        # (Tailwind ist im CSS; htmx liegt lokal unter /static/js)
+        # Bei Bedarf erweitern.
+    }
+}

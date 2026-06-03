@@ -1,0 +1,34 @@
+# Was NIE ins Image rein darf:
+.env
+.env.*
+*.pem
+*.key
+test_accounts.txt
+
+# Lokales venv und Caches
+venv/
+.venv/
+__pycache__/
+**/__pycache__/
+**/*.pyc
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+
+# Git / IDE / Claude
+.git/
+.gitignore
+.gitattributes
+.vscode/
+.idea/
+.claude/
+
+# Tools, Builds, Tests
+tools/
+tests/
+app/static/css/output.css
+
+# Docs (im Image unnoetig)
+*.md

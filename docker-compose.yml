@@ -1,0 +1,41 @@
+# Production-Stack: App (gunicorn) + Caddy (Reverse-Proxy mit HTTPS-Auto).
+#
+# Postgres laeuft auf dieser VPS bereits als EIGENER Container; den fassen
+# wir NICHT an. Die App spricht ueber das host-gateway mit Postgres
+# (Hostinger-Postgres ist auf 127.0.0.1:32770 auf dem Host gebunden).
+#
+# Start:   docker compose up -d --build
+# Logs:    docker compose logs -f app
+# Update:  git pull && docker compose up -d --build
+# Schema:  docker compose exec app alembic upgrade head
+
+services:
+  app:
+    build: .
+    container_name: wg-app
+    restart: unless-stopped
+    env_file: .env
+    expose:
+      - "8000"
+    # host.docker.internal -> Host-Gateway. In DATABASE_URL auf host.docker.internal:32770
+    # zeigen, dann redet die App ueber die Docker-Bruecke mit Postgres.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: wg-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+
+volumes:
+  caddy_data:
+  caddy_config:
