@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% from "components/ui.html" import page_header, sub_nav, task_type_border %}
+{% block title %}WG-Aufgaben — WG{% endblock %}
+
+{% block content %}
+<section class="space-y-6">
+  {% set tabs = [
+    (url_for('tasks.index'), 'mine', 'Meine'),
+    (url_for('tasks.view_all'), 'all', 'WG'),
+    (url_for('tasks.boerse'), 'boerse', 'Börse'),
+  ] %}
+  {% if can_create %}{% set tabs = tabs + [(url_for('tasks.new'), 'new', 'Neu'), (url_for('tasks.manage'), 'manage', 'Verwalten')] %}{% endif %}
+  {{ sub_nav(tabs, 'all') }}
+  {{ page_header("WG-Aufgaben", "Wer hat was wann.") }}
+
+  {# ---------- Bewohner-Strip mit Diensten der angezeigten Woche ---------- #}
+  <section class="space-y-2">
+    <h2 class="text-sm font-bold uppercase tracking-wide text-brand-600">
+      Dienste · {{ week_label }}
+    </h2>
+    <div class="grid gap-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+      {% for row in resident_strip %}
+        {% if row.duties %}
+          {% set duty = row.duties[0] %}
+          <div class="card {{ task_type_border(duty.task_definition) }} space-y-0.5 py-2.5">
+            <p class="text-xs font-bold text-slate-500">{{ row.user.name }}</p>
+            <p class="truncate text-sm font-extrabold text-slate-900">{{ duty.task_definition.title }}</p>
+            <p class="text-xs text-slate-500">bis {{ duty.period_end.strftime('%d.%m.') }}</p>
+          </div>
+        {% else %}
+          <div class="card-muted space-y-0.5 py-2.5">
+            <p class="text-xs font-bold text-slate-500">{{ row.user.name }}</p>
+            <p class="text-xs text-slate-400">— kein Dienst</p>
+          </div>
+        {% endif %}
+      {% endfor %}
+    </div>
+  </section>
+
+  {# ---------- Wochen-Kalender ---------- #}
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <h2 class="text-lg font-extrabold text-slate-800">{{ week_label }}</h2>
+    <div class="flex items-center gap-2">
+      <a href="{{ url_for('tasks.view_all', week=prev_week) }}" class="btn btn-ghost btn-sm">
+        {{ icon("chevron-right", "h-4 w-4 rotate-180") }}<span>Vorherige</span>
+      </a>
+      <a href="{{ url_for('tasks.view_all', week=this_week) }}" class="btn btn-ghost btn-sm">Heute</a>
+      <a href="{{ url_for('tasks.view_all', week=next_week) }}" class="btn btn-ghost btn-sm">
+        <span>Nächste</span>{{ icon("chevron-right", "h-4 w-4") }}
+      </a>
+    </div>
+  </div>
+
+  {# Desktop: 7-Spalten-Grid. Handy: vertikale Tagesliste – leere Tage werden
+     ausgeblendet (heute bleibt sichtbar). #}
+  <div class="grid grid-cols-1 gap-3 md:grid-cols-7">
+    {% for day in days %}
+      <div class="cal-day {% if day.is_today %}cal-day-today{% endif %}{% if not day.entries and not day.is_today %} hidden md:flex{% endif %}">
+        <div class="cal-head {% if day.is_today %}border-brand-200 text-brand-800{% endif %}">
+          <span class="text-sm font-extrabold">{{ day.weekday_short }}</span>
+          <span class="text-xs">{{ day.date.strftime('%d.%m.') }}</span>
+          {% if day.is_today %}<span class="ml-auto text-xs font-bold text-brand-600">heute</span>{% endif %}
+        </div>
+        <div class="flex-1 space-y-2 p-2">
+          {% for entry in day.entries %}
+            {% with occurrence = entry.occurrence,
+                    starts_before = entry.starts_before,
+                    multi_day = entry.multi_day %}
+              {% include "tasks/_components/calendar_entry.html" %}
+            {% endwith %}
+          {% else %}
+            <p class="py-2 text-center text-xs text-slate-300">—</p>
+          {% endfor %}
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

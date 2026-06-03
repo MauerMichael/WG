@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% from "components/ui.html" import page_header, empty_state %}
+
+{% block title %}Abwesenheiten – WG{% endblock %}
+
+{% set new_action %}
+<a href="{{ url_for('absences.new') }}" class="btn btn-primary">
+  {{ icon("plus", "h-4 w-4") }}
+  Längere Abwesenheit eintragen
+</a>
+{% endset %}
+
+{% block content %}
+<section class="space-y-6">
+  {{ page_header(
+    "Abwesenheit",
+    "Tippe eine Zelle an, um dich an dem Tag als anwesend (grün) oder abwesend (rot) zu markieren.",
+    new_action
+  ) }}
+
+  {# Wochen-Navigation #}
+  <div class="flex items-center justify-between gap-2">
+    <a href="{{ url_for('absences.index', week=prev_week) }}" class="btn btn-ghost btn-sm">
+      {{ icon("chevron-right", "h-4 w-4 rotate-180") }}<span class="hidden sm:inline">Vorherige</span>
+    </a>
+    <h2 class="text-center text-base font-extrabold tracking-tight text-slate-900 sm:text-lg">{{ week_label }}</h2>
+    <a href="{{ url_for('absences.index', week=next_week) }}" class="btn btn-ghost btn-sm">
+      <span class="hidden sm:inline">Nächste</span>{{ icon("chevron-right", "h-4 w-4") }}
+    </a>
+  </div>
+  <div class="flex justify-center">
+    <a href="{{ url_for('absences.index', week=this_week) }}" class="btn btn-ghost btn-sm">Diese Woche</a>
+  </div>
+
+  {# Legende #}
+  <div class="flex flex-wrap items-center gap-4 text-xs font-semibold text-slate-500">
+    <span class="flex items-center gap-1.5">
+      <span class="inline-block h-3 w-3 rounded bg-emerald-500"></span> anwesend
+    </span>
+    <span class="flex items-center gap-1.5">
+      <span class="inline-block h-3 w-3 rounded bg-rose-500"></span> abwesend
+    </span>
+    <span class="flex items-center gap-1.5">
+      <span class="inline-block h-3 w-3 rounded ring-2 ring-gold-400"></span> heute
+    </span>
+  </div>
+
+  {% if rows %}
+    {# 7-Spalten-Wochengitter: passt ohne horizontales Scrollen auf jedes Handy. #}
+    <div class="rounded-2xl bg-white p-2 shadow-soft sm:p-3">
+      <table class="w-full table-fixed border-collapse">
+        <thead>
+          <tr>
+            <th class="w-16 px-1 py-2 text-left text-xs font-bold text-slate-500 sm:w-32">
+              Bewohner
+            </th>
+            {% for d in days %}
+              <th class="px-0.5 py-2 text-center text-xs font-bold
+                  {% if d.is_today %}text-gold-700{% elif d.is_weekend %}text-slate-400{% else %}text-slate-600{% endif %}">
+                <div class="leading-tight">{{ d.weekday }}</div>
+                <div class="leading-tight text-slate-400">{{ d.day }}</div>
+              </th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            <tr class="border-t border-brand-50">
+              <td class="truncate px-1 py-1 text-sm font-bold text-slate-900">
+                {{ row.user.name }}
+              </td>
+              {% for cell in row.cells %}
+                {% include "absences/_cell.html" %}
+              {% endfor %}
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    {{ empty_state("calendar", "Keine Bewohner gefunden.") }}
+  {% endif %}
+</section>
+{% endblock %}

@@ -1,0 +1,31 @@
+{% from "components/icons.html" import icon %}
+{% from "components/ui.html" import empty_state, avatar %}
+{# Kommende Abwesenheiten im Haushalt (nächste 14 Tage). #}
+<section aria-labelledby="dash-abwesenheiten" class="space-y-3">
+  <h2 id="dash-abwesenheiten" class="flex items-center gap-2 text-lg font-extrabold tracking-tight text-slate-900">
+    <span class="flex h-7 w-7 items-center justify-center rounded-lg bg-brand-100 text-brand-600">
+      {{ icon("calendar", "h-4 w-4") }}
+    </span>
+    Kommende Abwesenheiten
+  </h2>
+  {% if upcoming_absences %}
+    <ul class="card space-y-3 !p-4">
+      {% for absence in upcoming_absences %}
+        <li class="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+          {{ avatar(absence.user, "h-8 w-8", "text-xs") }}
+          <span class="font-bold text-slate-900">{{ absence.user.name }}</span>
+          <span class="text-slate-500">
+            {{ absence.start_date.strftime("%d.%m.") }}
+            –
+            {{ absence.end_date.strftime("%d.%m.%Y") }}
+          </span>
+          {% if absence.reason %}
+            <span class="badge badge-neutral">{{ absence.reason }}</span>
+          {% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    {{ empty_state("calendar", "Keine geplanten Abwesenheiten in den nächsten 14 Tagen.", "Alle sind da.") }}
+  {% endif %}
+</section>

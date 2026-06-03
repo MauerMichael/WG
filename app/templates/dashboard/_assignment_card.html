@@ -1,0 +1,35 @@
+{% from "components/icons.html" import icon %}
+{% from "components/ui.html" import task_type_border, task_type_badge %}
+{# Erwartet im Scope: assignment, occurrence, definition. #}
+<li class="card {{ task_type_border(definition) }}">
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <div class="min-w-0 flex-1 space-y-1.5">
+      <p class="text-base font-extrabold text-slate-900">{{ definition.title }}</p>
+      <div class="flex flex-wrap items-center gap-2">
+        {{ task_type_badge(definition) }}
+        <span class="badge badge-info">{{ definition.difficulty_points }} Pkt</span>
+        <span class="inline-flex items-center gap-1 text-xs font-bold text-slate-500">
+          {{ icon("clock", "h-3.5 w-3.5") }}
+          fällig {{ occurrence.due_date.strftime("%d.%m.%Y") }}
+        </span>
+      </div>
+    </div>
+    <form
+      method="post"
+      action="/tasks/{{ occurrence.id }}/done"
+      hx-post="/tasks/{{ occurrence.id }}/done"
+      hx-target="closest li"
+      hx-swap="outerHTML"
+      class="shrink-0"
+    >
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button
+        type="submit"
+        class="btn btn-accent btn-sm"
+      >
+        {{ icon("check", "h-4 w-4") }}
+        Erledigt
+      </button>
+    </form>
+  </div>
+</li>

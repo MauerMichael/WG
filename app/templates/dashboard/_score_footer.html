@@ -1,0 +1,29 @@
+{% from "components/icons.html" import icon %}
+{# Warmer WG-Score-Footer: nur Score + Haushaltsschnitt, ohne Extras-CTA
+   (Extras wandert in den eigenen Nav-Tab). #}
+<section aria-labelledby="dash-score">
+  <h2 id="dash-score" class="sr-only">WG-Score</h2>
+  <div class="card-muted">
+    <div class="flex flex-wrap items-center gap-4">
+      <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gold-400 text-gold-900 shadow-soft">
+        {{ icon("sparkle", "h-6 w-6") }}
+      </span>
+      {% if my_score is not none %}
+        <div class="flex flex-wrap items-center gap-x-6 gap-y-1">
+          <p class="text-sm font-bold text-slate-600">
+            Dein WG-Score
+            <span class="ml-1 font-display text-xl font-extrabold text-gold-600">{{ "%.1f"|format(my_score) }}</span>
+          </p>
+          {% if avg_score is not none %}
+            <p class="text-sm font-bold text-slate-600">
+              Haushalts-Schnitt
+              <span class="ml-1 font-display text-xl font-extrabold text-slate-900">{{ "%.1f"|format(avg_score) }}</span>
+            </p>
+          {% endif %}
+        </div>
+      {% else %}
+        <p class="text-sm text-slate-500">WG-Score wird berechnet, sobald Aufgaben abgeschlossen sind.</p>
+      {% endif %}
+    </div>
+  </div>
+</section>

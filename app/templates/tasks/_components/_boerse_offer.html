@@ -1,0 +1,95 @@
+{# Eine Abgabe auf der Börse.
+
+   Erwartet:
+   - offer: TaskHandoverOffer (mit .assignment.occurrence.task_definition +
+     .occurrence.assignments + .offered_by preloaded)
+   - current_user_id: UUID des eingeloggten Users
+   - today: date.today()
+   - claimed: bool (optional) — gerade übernommen, Terminal-Zustand
+   - removed: bool (optional) — gerade zurückgezogen, Terminal-Zustand
+
+   Dieses <li> ist das HTMX-Swap-Ziel (id muss stabil bleiben).
+#}
+{% from "components/icons.html" import icon %}
+{% from "components/ui.html" import badge, avatar, task_type_border, task_type_badge %}
+{% set assignment = offer.assignment %}
+{% set occurrence = assignment.occurrence %}
+{% set definition = occurrence.task_definition %}
+{% set is_mine = offer.offered_by_id == current_user_id %}
+{# Schon auf dieser Occurrence eingeteilt? Dann nicht übernehmbar (sonst
+   doppelter Punkteanteil). #}
+{% set ns = namespace(already=false) %}
+{% for a in occurrence.assignments %}
+  {% if a.user_id == current_user_id %}{% set ns.already = true %}{% endif %}
+{% endfor %}
+
+<li id="boerse-offer-{{ offer.id }}" class="card {{ task_type_border(definition) }}">
+  {% if claimed or offer.status.value == "CLAIMED" %}
+    <p class="flex items-center gap-2 text-sm font-bold text-emerald-700">
+      {{ icon("check-circle", "h-5 w-5") }}
+      Übernommen{% if claimed %} — viel Erfolg!{% endif %}
+    </p>
+  {% elif removed or offer.status.value == "CANCELLED" %}
+    <p class="flex items-center gap-2 text-sm font-semibold text-slate-500">
+      {{ icon("undo", "h-4 w-4") }}Abgabe zurückgezogen.
+    </p>
+  {% else %}
+    <div class="mb-2">{{ task_type_badge(definition) }}</div>
+    <div class="flex flex-wrap items-start justify-between gap-3">
+      <div class="min-w-0 flex-1 space-y-2">
+        <p class="font-extrabold text-slate-900">
+          <a href="{{ url_for('tasks.detail', definition_id=definition.id) }}"
+             class="transition hover:text-brand-700">{{ definition.title }}</a>
+        </p>
+        <p class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
+          <span class="inline-flex items-center gap-1">
+            {{ icon("calendar", "h-3.5 w-3.5") }}
+            Fällig am {{ occurrence.due_date.strftime('%d.%m.%Y') }}
+          </span>
+          <span class="text-slate-300">·</span>
+          <span class="inline-flex items-center gap-1">
+            {{ icon("clock", "h-3.5 w-3.5") }}
+            {{ occurrence.period_start.strftime('%d.%m.') }}–{{ occurrence.period_end.strftime('%d.%m.%Y') }}
+          </span>
+        </p>
+        <p class="flex items-center gap-1.5 text-xs text-slate-600">
+          {{ avatar(offer.offered_by, "h-5 w-5", "text-[0.6rem]") }}
+          <span>Abgegeben von <span class="font-semibold text-slate-700">{{ offer.offered_by.name }}</span></span>
+        </p>
+        {% if offer.note %}
+          <p class="rounded-xl bg-brand-50 px-3 py-2 text-xs text-slate-600">„{{ offer.note }}"</p>
+        {% endif %}
+      </div>
+
+      <div class="flex flex-col items-end gap-2">
+        <span class="badge badge-info">{{ definition.difficulty_points }} Pkt</span>
+        {% if is_mine %}
+          {{ badge("deine Abgabe", "info") }}
+          <form hx-post="{{ url_for('tasks.withdraw_offer', offer_id=offer.id, **{'from': 'board'}) }}"
+                hx-target="#boerse-offer-{{ offer.id }}"
+                hx-swap="outerHTML"
+                method="post"
+                action="{{ url_for('tasks.withdraw_offer', offer_id=offer.id, **{'from': 'board'}) }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-ghost btn-sm">
+              {{ icon("undo", "h-4 w-4") }}Zurückziehen
+            </button>
+          </form>
+        {% elif ns.already %}
+          <span class="text-xs text-slate-400">schon eingeteilt</span>
+        {% else %}
+          <form hx-post="{{ url_for('tasks.claim_offer', offer_id=offer.id) }}"
+                hx-target="#boerse-offer-{{ offer.id }}"
+                hx-swap="outerHTML"
+                method="post"
+                action="{{ url_for('tasks.claim_offer', offer_id=offer.id) }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-accent btn-sm">
+              {{ icon("check", "h-4 w-4") }}Übernehmen
+            </button>
+          </form>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+</li>

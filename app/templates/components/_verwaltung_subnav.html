@@ -1,0 +1,10 @@
+{#
+  Sub-Navigation des "Verwaltung"-Bereichs (Hauswart + Admin + Extra-Pruefung).
+  Aktiv-Markierung ueber request.blueprint. Standalone einbindbar.
+#}
+{% from "components/ui.html" import sub_nav %}
+{{ sub_nav([
+  (url_for('hauswart.index'), 'hauswart', 'Aufgaben prüfen'),
+  (url_for('admin.users'),    'admin',    'Nutzer'),
+  (url_for('extras.index'),   'extras',   'Extra-Leistungen'),
+], request.blueprint) }}

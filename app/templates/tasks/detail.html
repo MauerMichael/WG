@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% from "components/ui.html" import page_header, badge, empty_state %}
+{% block title %}{{ definition.title }} — WG{% endblock %}
+
+{% block content %}
+<section class="space-y-6">
+  {% set deactivate_action %}
+    {% if can_manage and definition.is_active %}
+      <form method="post" action="{{ url_for('tasks.deactivate', definition_id=definition.id) }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-danger btn-sm">
+          {{ icon("trash", "h-4 w-4") }}Deaktivieren
+        </button>
+      </form>
+    {% endif %}
+  {% endset %}
+  {{ page_header(definition.title, action=deactivate_action) }}
+
+  <div class="flex flex-wrap items-center gap-2">
+    {{ badge(recurrence_labels[definition.recurrence], "info") }}
+    {{ badge(definition.difficulty_points ~ " Punkte", "neutral") }}
+    {{ badge(definition.required_assignees ~ " Bewohner pro Auftrag", "neutral") }}
+    {% if not definition.is_active %}{{ badge("deaktiviert", "danger") }}{% endif %}
+  </div>
+
+  {% if definition.description %}
+    <div class="card-muted whitespace-pre-line text-sm text-slate-700">
+      {{ definition.description }}
+    </div>
+  {% endif %}
+
+  <section class="space-y-3">
+    <h2 class="flex items-center gap-2 text-lg font-extrabold text-slate-900">
+      {{ icon("calendar", "h-5 w-5 text-brand-500") }}Termine
+    </h2>
+    {% if occurrences %}
+      <ul class="space-y-3">
+        {% for occurrence in occurrences %}
+          {% include "tasks/_components/occurrence_card.html" %}
+        {% endfor %}
+      </ul>
+    {% else %}
+      {{ empty_state("clock", "Noch keine Termine erzeugt.") }}
+    {% endif %}
+  </section>
+</section>
+{% endblock %}

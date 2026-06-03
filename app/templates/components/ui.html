@@ -1,0 +1,123 @@
+{#
+  Wiederverwendbare UI-Bausteine.
+  Nutzung:  {% from "components/ui.html" import badge, page_header, empty_state, sub_nav, stat_tile, action_form, avatar %}
+
+  - badge(text, variant)        variant: success|warning|info|neutral|danger|gold
+  - page_header(title, subtitle, action)   action = fertiges HTML (z.B. Button), optional
+  - empty_state(icon_name, text, hint)      hint optional
+  - avatar(user, size, text_class)          size/text_class = literale Tailwind-Klassen
+  - sub_nav(items, active)                  items = Liste aus (href, key, label); active = key
+  - stat_tile(value, label, tone)           tone: brand|emerald|gold|rose
+  - action_form(action_url, label, variant, icon_name, hx_target, hidden, confirm, block)
+
+  WICHTIG: Klassennamen werden NIE aus Variablen zusammengebaut. Varianten
+  bilden auf voll ausgeschriebene Literale ab (Map unten), damit Tailwind sie
+  beim Scan findet und nicht wegoptimiert.
+#}
+{% from "components/icons.html" import icon %}
+
+{% macro badge(text, variant="neutral") -%}
+{%- set cls = {
+  "success": "badge-success", "warning": "badge-warning", "info": "badge-info",
+  "neutral": "badge-neutral", "danger": "badge-danger", "gold": "badge-gold"
+}.get(variant, "badge-neutral") -%}
+<span class="badge {{ cls }}">{{ text }}</span>
+{%- endmacro %}
+
+{% macro avatar(user, size="h-9 w-9", text_class="text-sm") -%}
+{%- if user.avatar_url -%}
+<img src="{{ user.avatar_url }}" alt="" class="{{ size }} rounded-full object-cover ring-2 ring-brand-100">
+{%- else -%}
+<span class="{{ size }} flex items-center justify-center rounded-full bg-brand-100 {{ text_class }} font-extrabold text-brand-700">{{ user.name[:1] | upper if user.name else "?" }}</span>
+{%- endif -%}
+{%- endmacro %}
+
+{% macro sub_nav(items, active) -%}
+<nav class="subnav">
+  {% for href, key, label in items %}
+  <a href="{{ href }}" class="subnav-link {{ 'subnav-link-active' if key == active }}">{{ label }}</a>
+  {% endfor %}
+</nav>
+{%- endmacro %}
+
+{% macro stat_tile(value, label, tone="brand") -%}
+{%- set tonecls = {
+  "brand": "text-brand-600", "emerald": "text-emerald-600",
+  "gold": "text-gold-600", "rose": "text-rose-600"
+}.get(tone, "text-brand-600") -%}
+<div class="stat-tile">
+  <span class="stat-value {{ tonecls }}">{{ value }}</span>
+  <span class="stat-label">{{ label }}</span>
+</div>
+{%- endmacro %}
+
+{#
+  Kapselt die wiederkehrenden HTMX-Aktions-Formulare (admin/hauswart/extras).
+  hidden = geordnetes Dict {name: value}. hx_target setzt zugleich hx-swap="outerHTML".
+#}
+{% macro action_form(action_url, label, variant="primary", icon_name="", hx_target="", hidden={}, confirm=None, block=true) -%}
+{%- set btncls = {
+  "primary": "btn-primary", "accent": "btn-accent", "ghost": "btn-ghost", "danger": "btn-danger"
+}.get(variant, "btn-primary") -%}
+<form method="post" action="{{ action_url }}" hx-post="{{ action_url }}"
+      {% if hx_target %}hx-target="{{ hx_target }}" hx-swap="outerHTML"{% endif %}
+      {% if confirm %}hx-confirm="{{ confirm }}"{% endif %}
+      class="{{ 'w-full sm:w-auto' if block }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  {% for k, v in hidden.items() %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
+  <button type="submit" class="btn {{ btncls }} btn-sm{{ ' btn-block' if block }}">
+    {%- if icon_name %}{{ icon(icon_name, "h-4 w-4") }}{% endif %}<span>{{ label }}</span>
+  </button>
+</form>
+{%- endmacro %}
+
+{% macro page_header(title, subtitle="", action="") -%}
+<header class="flex flex-wrap items-end justify-between gap-3">
+  <div class="space-y-1">
+    <h1 class="page-title">{{ title }}</h1>
+    {% if subtitle %}<p class="text-sm text-slate-500">{{ subtitle }}</p>{% endif %}
+  </div>
+  {% if action %}<div class="shrink-0">{{ action | safe }}</div>{% endif %}
+</header>
+{%- endmacro %}
+
+{% macro empty_state(icon_name="sparkle", text="Nichts hier", hint="") -%}
+<div class="empty-state">
+  <span class="flex h-12 w-12 items-center justify-center rounded-full bg-brand-100 text-brand-500">
+    {{ icon(icon_name, "h-6 w-6") }}
+  </span>
+  <p class="text-sm font-bold text-slate-600">{{ text }}</p>
+  {% if hint %}<p class="text-xs text-slate-400">{{ hint }}</p>{% endif %}
+</div>
+{%- endmacro %}
+
+{# Typ-Klassifikation einer TaskDefinition: leitet die 4 Klassen aus
+   kind + recurrence + required_assignees ab. Reine Ableitung, kein DB-Feld. #}
+{% macro task_type_key(definition) -%}
+  {%- if definition.kind.value == 'DIENST' -%}dienst
+  {%- elif definition.recurrence.value == 'NONE' and (definition.required_assignees or 1) > 1 -%}event
+  {%- elif definition.recurrence.value == 'NONE' -%}einmalig
+  {%- else -%}wiederholend
+  {%- endif -%}
+{%- endmacro %}
+
+{# Linke Border in der Typfarbe — fuer Karten/Eintraege.
+   ALLE Klassen literal hier, sonst scannt Tailwind sie nicht. #}
+{% macro task_type_border(definition) -%}
+  {%- set k = task_type_key(definition) -%}
+  {%- if k == 'dienst' -%}border-l-4 border-brand-400
+  {%- elif k == 'wiederholend' -%}border-l-4 border-sky-400
+  {%- elif k == 'einmalig' -%}border-l-4 border-accent-400
+  {%- else -%}border-l-4 border-rose-400
+  {%- endif -%}
+{%- endmacro %}
+
+{# Typ-Badge fuer Karten/Listen. Nutzt vorhandene .badge-*-Varianten. #}
+{% macro task_type_badge(definition) -%}
+  {%- set k = task_type_key(definition) -%}
+  {%- if k == 'dienst' -%}<span class="badge badge-info">Dienst</span>
+  {%- elif k == 'wiederholend' -%}<span class="badge badge-sky">Wiederholend</span>
+  {%- elif k == 'einmalig' -%}<span class="badge badge-warning">Einmalig</span>
+  {%- else -%}<span class="badge badge-danger">Event</span>
+  {%- endif -%}
+{%- endmacro %}

@@ -1,0 +1,24 @@
+{# Zentrale Flash-Anzeige. Wird in base.html eingebunden -- nicht pro Seite wiederholen. #}
+{% from "components/icons.html" import icon %}
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    <div class="space-y-2">
+      {% for category, msg in messages %}
+        {% if category == 'success' %}
+          {% set tone = 'border-emerald-200 bg-emerald-50 text-emerald-900' %}
+          {% set ic = 'check-circle' %}
+        {% elif category == 'error' %}
+          {% set tone = 'border-rose-200 bg-rose-50 text-rose-900' %}
+          {% set ic = 'alert' %}
+        {% else %}
+          {% set tone = 'border-brand-200 bg-brand-50 text-brand-900' %}
+          {% set ic = 'sparkle' %}
+        {% endif %}
+        <div class="flex items-start gap-2.5 rounded-xl border px-4 py-3 text-sm font-semibold {{ tone }}">
+          <span class="mt-0.5 shrink-0">{{ icon(ic, "h-4 w-4") }}</span>
+          <span>{{ msg }}</span>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+{% endwith %}

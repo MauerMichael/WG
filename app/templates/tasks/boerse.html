@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% from "components/ui.html" import page_header, sub_nav, empty_state %}
+{% block title %}Aufgaben-Börse — WG{% endblock %}
+
+{% block content %}
+<section class="space-y-6">
+  {% set tabs = [
+    (url_for('tasks.index'), 'mine', 'Meine'),
+    (url_for('tasks.view_all'), 'all', 'WG'),
+    (url_for('tasks.boerse'), 'boerse', 'Börse'),
+  ] %}
+  {% if can_create %}{% set tabs = tabs + [(url_for('tasks.new'), 'new', 'Neu'), (url_for('tasks.manage'), 'manage', 'Verwalten')] %}{% endif %}
+  {{ sub_nav(tabs, 'boerse') }}
+  {{ page_header("Aufgaben-Börse", "Offene Abgaben — übernimm eine Aufgabe von einem Mitbewohner.") }}
+
+  {% if offers %}
+    <ul class="space-y-3">
+      {% for offer in offers %}
+        {% include "tasks/_components/_boerse_offer.html" %}
+      {% endfor %}
+    </ul>
+  {% else %}
+    {{ empty_state("sparkle", "Keine offenen Abgaben.", "Gerade gibt niemand eine Aufgabe ab.") }}
+  {% endif %}
+</section>
+{% endblock %}

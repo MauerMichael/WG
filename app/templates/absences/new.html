@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+
+{% block title %}Abwesenheit eintragen – WG{% endblock %}
+
+{% block content %}
+<section class="mx-auto max-w-xl space-y-6">
+  <div class="space-y-1">
+    <h1 class="page-title">Abwesenheit eintragen</h1>
+    <p class="text-sm text-slate-500">
+      Trag ein, wann du nicht da bist — damit Aufgaben fair umverteilt werden.
+    </p>
+  </div>
+
+  <form
+    method="post"
+    action="{{ url_for('absences.create') }}"
+    class="card space-y-5"
+  >
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if can_assign_other %}
+      <div class="field">
+        <label class="label" for="user_id">Nutzer</label>
+        <select id="user_id" name="user_id" class="input">
+          {% for u in users %}
+            <option value="{{ u.id }}" {% if u.id == default_user_id %}selected{% endif %}>
+              {{ u.name }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+    {% endif %}
+
+    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div class="field">
+        <label class="label" for="start_date">Von</label>
+        <input
+          type="date"
+          id="start_date"
+          name="start_date"
+          required
+          value="{{ today.isoformat() }}"
+          class="input"
+        />
+      </div>
+      <div class="field">
+        <label class="label" for="end_date">Bis</label>
+        <input
+          type="date"
+          id="end_date"
+          name="end_date"
+          value="{{ today.isoformat() }}"
+          class="input"
+        />
+        <p class="text-xs text-slate-400">Leer lassen = nur ein Tag.</p>
+      </div>
+    </div>
+
+    <div class="field">
+      <label class="label" for="reason">Grund (optional)</label>
+      <input
+        type="text"
+        id="reason"
+        name="reason"
+        maxlength="500"
+        placeholder="z.B. Urlaub, Dienstreise, Familie"
+        class="input"
+      />
+    </div>
+
+    <div class="flex items-center justify-end gap-3">
+      <a href="{{ url_for('absences.index') }}" class="btn btn-ghost">
+        Abbrechen
+      </a>
+      <button type="submit" class="btn btn-primary">
+        {{ icon("check", "h-4 w-4") }}
+        Eintragen
+      </button>
+    </div>
+  </form>
+</section>
+{% endblock %}

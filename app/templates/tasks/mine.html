@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% from "components/ui.html" import page_header, sub_nav, empty_state, task_type_border %}
+{% block title %}Meine Aufgaben — WG{% endblock %}
+
+{% block content %}
+<section class="space-y-6">
+  {% set tabs = [
+    (url_for('tasks.index'), 'mine', 'Meine'),
+    (url_for('tasks.view_all'), 'all', 'WG'),
+    (url_for('tasks.boerse'), 'boerse', 'Börse'),
+  ] %}
+  {% if can_create %}{% set tabs = tabs + [(url_for('tasks.new'), 'new', 'Neu'), (url_for('tasks.manage'), 'manage', 'Verwalten')] %}{% endif %}
+  {{ sub_nav(tabs, 'mine') }}
+  {{ page_header("Meine Aufgaben", "Was musst du als nächstes erledigen?") }}
+
+  {# ---------- Hero: laufender + nächster Dienst ---------- #}
+  <div class="grid gap-3 md:grid-cols-3">
+    {% if current_duties %}
+      {% for occ in current_duties %}
+        <div class="md:col-span-2 card {{ task_type_border(occ.task_definition) }} space-y-1.5">
+          <p class="text-xs font-bold uppercase tracking-wide text-brand-600">Dein laufender Dienst</p>
+          <p class="text-xl font-extrabold text-slate-900">
+            <a href="{{ url_for('tasks.detail', definition_id=occ.task_definition.id) }}"
+               class="hover:text-brand-700">{{ occ.task_definition.title }}</a>
+          </p>
+          <p class="flex items-center gap-1 text-sm text-slate-600">
+            {{ icon("clock", "h-4 w-4") }}bis {{ occ.period_end.strftime('%d.%m.') }}
+            <span class="ml-2 badge badge-info">{{ occ.task_definition.difficulty_points }} Pkt</span>
+          </p>
+        </div>
+      {% endfor %}
+    {% else %}
+      <div class="md:col-span-2 card-muted text-sm text-slate-600">
+        Aktuell hast du keinen laufenden Dienst.
+      </div>
+    {% endif %}
+    {% if next_duty %}
+      <div class="card {{ task_type_border(next_duty.task_definition) }} space-y-1">
+        <p class="text-xs font-bold uppercase tracking-wide text-brand-600">Nächster Dienst</p>
+        <p class="text-base font-extrabold text-slate-900">{{ next_duty.task_definition.title }}</p>
+        <p class="text-xs text-slate-500">
+          ab {{ next_duty.period_start.strftime('%d.%m.') }} — bis {{ next_duty.period_end.strftime('%d.%m.') }}
+        </p>
+      </div>
+    {% endif %}
+  </div>
+
+  {# ---------- 7-Tages-Streifen ---------- #}
+  <div class="flex items-center justify-between gap-2">
+    <a href="{{ url_for('tasks.index', day=prev_day) }}" class="btn btn-ghost btn-sm">
+      {{ icon("chevron-right", "h-4 w-4 rotate-180") }}<span>−7 Tage</span>
+    </a>
+    <a href="{{ url_for('tasks.index', day=today_str) }}" class="btn btn-ghost btn-sm">Heute</a>
+    <a href="{{ url_for('tasks.index', day=next_day) }}" class="btn btn-ghost btn-sm">
+      <span>+7 Tage</span>{{ icon("chevron-right", "h-4 w-4") }}
+    </a>
+  </div>
+  <div class="grid grid-cols-7 gap-1.5">
+    {% for d in day_strip %}
+      <a href="{{ url_for('tasks.index', day=d.iso) }}"
+         class="flex flex-col items-center rounded-xl border px-1 py-2 text-xs font-bold
+                {% if d.is_focus %}border-brand-400 bg-brand-50 text-brand-800{% else %}border-brand-100 bg-white text-slate-600 hover:bg-brand-50{% endif %}">
+        <span class="text-[0.65rem] uppercase">{{ d.label }}</span>
+        <span>{{ d.num }}</span>
+        {% if d.is_today %}<span class="mt-0.5 text-[0.6rem] font-extrabold text-brand-600">heute</span>{% endif %}
+      </a>
+    {% endfor %}
+  </div>
+
+  {# ---------- Sektionen mit eigenen Aufgaben ---------- #}
+  {% if sections %}
+    {% for section in sections %}
+      <section class="space-y-3">
+        <h2 class="text-sm font-bold uppercase tracking-wide text-brand-600">{{ section.label }}</h2>
+        <ul class="space-y-3">
+          {% for occurrence in section.occurrences %}
+            {% include "tasks/_components/occurrence_card.html" %}
+          {% endfor %}
+        </ul>
+      </section>
+    {% endfor %}
+  {% else %}
+    {{ empty_state("sparkle", "Nichts für dich anstehend.", "Genieß die Pause.") }}
+  {% endif %}
+</section>
+{% endblock %}

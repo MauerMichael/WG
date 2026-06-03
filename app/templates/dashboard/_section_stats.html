@@ -1,0 +1,31 @@
+{% from "components/icons.html" import icon %}
+{% from "components/ui.html" import badge, stat_tile %}
+{# Persönliche Statistiken: erledigt gesamt, Punkte, verpasst/schlecht, Zuverlässigkeit. #}
+<section aria-labelledby="dash-stats" class="space-y-3">
+  <h2 id="dash-stats" class="flex items-center gap-2 text-lg font-extrabold tracking-tight text-slate-900">
+    <span class="flex h-7 w-7 items-center justify-center rounded-lg bg-brand-100 text-brand-600">
+      {{ icon("sparkle", "h-4 w-4") }}
+    </span>
+    Deine Statistik
+  </h2>
+  <div class="grid grid-cols-3 gap-3">
+    {{ stat_tile(stats.completed, "erledigt", "emerald") }}
+    {{ stat_tile(stats.points, "Punkte", "gold") }}
+    {{ stat_tile(stats.missed, "verpasst", "rose") }}
+  </div>
+  <div class="card-muted flex items-center justify-center gap-2">
+    <span class="text-sm font-bold text-slate-600">Zuverlässigkeit</span>
+    {% if stats.reliability is none %}
+      {{ badge("—", "neutral") }}
+    {% else %}
+      {% set pct = (stats.reliability * 100) | round | int %}
+      {% if pct >= 80 %}
+        {{ badge(pct ~ "%", "success") }}
+      {% elif pct >= 50 %}
+        {{ badge(pct ~ "%", "warning") }}
+      {% else %}
+        {{ badge(pct ~ "%", "danger") }}
+      {% endif %}
+    {% endif %}
+  </div>
+</section>

@@ -1,0 +1,23 @@
+{% from "components/icons.html" import icon %}
+{% from "components/ui.html" import empty_state %}
+{# Restliche Woche (ohne heute) bis Sonntag. #}
+<section aria-labelledby="dash-woche" class="space-y-3">
+  <div class="flex items-center justify-between">
+    <h2 id="dash-woche" class="flex items-center gap-2 text-lg font-extrabold tracking-tight text-slate-900">
+      <span class="flex h-7 w-7 items-center justify-center rounded-lg bg-brand-100 text-brand-600">
+        {{ icon("calendar", "h-4 w-4") }}
+      </span>
+      Diese Woche
+    </h2>
+    <span class="badge badge-neutral">bis Sonntag</span>
+  </div>
+  {% if week_rows %}
+    <ul class="space-y-3">
+      {% for assignment, occurrence, definition in week_rows %}
+        {% include "dashboard/_assignment_card.html" %}
+      {% endfor %}
+    </ul>
+  {% else %}
+    {{ empty_state("check-circle", "Keine weiteren Aufgaben in dieser Woche.", "Alles im grünen Bereich.") }}
+  {% endif %}
+</section>

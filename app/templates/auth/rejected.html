@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+
+{% block title %}Zugang abgelehnt – WG{% endblock %}
+
+{% block content %}
+<section class="mx-auto mt-6 max-w-md">
+  <div class="card space-y-5 border border-rose-200 bg-rose-50 p-8 text-center">
+    <span class="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-500 text-white shadow-soft">
+      {{ icon("alert", "h-7 w-7") }}
+    </span>
+    <h1 class="text-2xl font-extrabold tracking-tight text-rose-900">
+      Zugang abgelehnt
+    </h1>
+    <p class="text-sm font-bold text-rose-800">
+      {% if user %}Hallo {{ user.name }}, dein{% else %}Dein{% endif %} Account
+      wurde abgelehnt und hat keinen Zugriff auf die WG-App.
+    </p>
+    <p class="text-xs text-rose-700">
+      Wenn du glaubst, das sei ein Fehler, melde dich bei deinem Hauswart oder
+      Admin.
+    </p>
+    <div>
+      <a
+        href="{{ url_for('auth.login') }}"
+        class="btn btn-danger"
+      >
+        Zur Anmeldung
+      </a>
+    </div>
+  </div>
+</section>
+{% endblock %}

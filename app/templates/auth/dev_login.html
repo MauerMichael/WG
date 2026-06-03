@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% from "components/ui.html" import badge %}
+
+{% block title %}Dev-Login – WG{% endblock %}
+
+{% block content %}
+<section class="mx-auto mt-6 max-w-lg space-y-6">
+  <div class="card space-y-6 p-8">
+  <header class="space-y-3 text-center">
+    <h1 class="page-title">Dev-Login</h1>
+    <p class="text-sm text-slate-600">
+      Nur lokal: als Test-Account einloggen, ohne Google. Wähle einen Nutzer.
+    </p>
+    <p class="flex items-center justify-center gap-2 rounded-xl border border-gold-200 bg-gold-50 px-3 py-2 text-xs font-bold text-gold-800">
+      {{ icon("alert", "h-4 w-4 shrink-0") }}
+      Diese Seite ist nur aktiv, solange <code>DEV_LOGIN_ENABLED</code> gesetzt ist.
+    </p>
+  </header>
+
+  <ul class="space-y-3">
+    {% for user in users %}
+      <li class="flex items-center justify-between gap-3 rounded-2xl bg-brand-50/60 p-4">
+        <div class="min-w-0">
+          <p class="truncate text-sm font-extrabold text-slate-900">{{ user.name }}</p>
+          <p class="truncate text-xs text-slate-500">{{ user.email }}</p>
+          <p class="mt-1.5 flex flex-wrap items-center gap-1">
+            {% for r in user.roles %}
+              {{ badge(r.role.value, "info") }}
+            {% endfor %}
+            {{ badge(user.status.value, "neutral") }}
+          </p>
+        </div>
+        <form method="post" action="{{ url_for('auth.dev_login_as', user_id=user.id) }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button
+            type="submit"
+            class="btn btn-primary btn-sm"
+          >
+            Einloggen
+          </button>
+        </form>
+      </li>
+    {% else %}
+      <li class="empty-state">
+        <span class="flex h-12 w-12 items-center justify-center rounded-full bg-brand-100 text-brand-500">
+          {{ icon("users", "h-6 w-6") }}
+        </span>
+        <p class="text-sm font-bold text-slate-600">Keine Nutzer vorhanden.</p>
+        <p class="text-xs text-slate-400">Führe <code>scripts/seed_dev_data.py</code> aus.</p>
+      </li>
+    {% endfor %}
+  </ul>
+
+  <p class="text-center text-xs text-slate-500">
+    <a href="{{ url_for('auth.login') }}" class="font-bold text-brand-600 hover:text-brand-700">Zurück zur normalen Anmeldung</a>
+  </p>
+  </div>
+</section>
+{% endblock %}

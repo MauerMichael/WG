@@ -1,0 +1,131 @@
+{# Erwartet:
+   - occurrence: TaskOccurrence (mit .task_definition + .assignments preloaded)
+   - current_user_id: UUID des eingeloggten Users
+#}
+{% from "components/icons.html" import icon %}
+{% from "components/ui.html" import badge, task_type_border, task_type_badge %}
+{% set definition = occurrence.task_definition %}
+{# namespace: in einer for-Schleife gesetzte Variablen leaken in Jinja sonst
+   nicht nach außen — own_assignment würde immer none bleiben. #}
+{% set ns = namespace(own=none) %}
+{% for a in occurrence.assignments %}
+  {% if a.user_id == current_user_id %}{% set ns.own = a %}{% endif %}
+{% endfor %}
+{% set own_assignment = ns.own %}
+{# Offenes Abgabe-Angebot der eigenen Zuweisung (für „abgegeben"-Status). #}
+{% set offer_ns = namespace(own=none) %}
+{% if own_assignment %}
+  {% for o in own_assignment.handover_offers %}
+    {% if o.status.value == "OPEN" %}{% set offer_ns.own = o %}{% endif %}
+  {% endfor %}
+{% endif %}
+{% set own_offer = offer_ns.own %}
+{% set done_by = [] %}
+{% for a in occurrence.assignments %}
+  {% if a.status.value == "DONE" %}{% set _ = done_by.append(a.user.name) %}{% endif %}
+{% endfor %}
+
+<li id="occurrence-{{ occurrence.id }}" class="card {{ task_type_border(definition) }}">
+  {# Typ-Badge oben — kompakte visuelle Klassifizierung. #}
+  <div class="mb-2">{{ task_type_badge(definition) }}</div>
+  <div class="flex flex-wrap items-start justify-between gap-3">
+    <div class="min-w-0 flex-1 space-y-2">
+      <p class="font-extrabold text-slate-900">
+        <a href="{{ url_for('tasks.detail', definition_id=definition.id) }}"
+           class="transition hover:text-brand-700">
+          {{ definition.title }}
+        </a>
+      </p>
+      <p class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
+        <span class="inline-flex items-center gap-1">
+          {{ icon("calendar", "h-3.5 w-3.5") }}
+          Fällig am {{ occurrence.due_date.strftime('%d.%m.%Y') }}
+        </span>
+        <span class="text-slate-300">·</span>
+        <span class="inline-flex items-center gap-1">
+          {{ icon("clock", "h-3.5 w-3.5") }}
+          {{ occurrence.period_start.strftime('%d.%m.') }}–{{ occurrence.period_end.strftime('%d.%m.%Y') }}
+        </span>
+      </p>
+      <div class="flex flex-wrap items-center gap-1.5 text-xs text-slate-600">
+        <span class="inline-flex items-center gap-1 font-bold text-slate-500">
+          {{ icon("users", "h-3.5 w-3.5") }}Zugewiesen:
+        </span>
+        {% for a in occurrence.assignments %}
+          <span class="inline-flex items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 font-semibold text-brand-700">
+            <span class="flex h-5 w-5 items-center justify-center rounded-full bg-brand-100 text-[0.6rem] font-extrabold text-brand-700">
+              {{ a.user.name[:1] | upper if a.user.name else '?' }}
+            </span>
+            {{ a.user.name }}
+            {% if a.status.value == "DONE" %}{{ icon("check", "h-3.5 w-3.5 text-emerald-600") }}{% endif %}
+          </span>
+          {% if a.assigned_during_absence %}{{ badge("abwesend!", "warning") }}{% endif %}
+        {% else %}
+          <em class="text-slate-400">niemand</em>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="flex flex-col items-end gap-2">
+      {% if occurrence.status.value == "DONE" %}
+        <span class="badge badge-success">
+          {{ icon("check-circle", "h-3.5 w-3.5") }}
+          Erledigt{% if done_by %} von {{ done_by|join(', ') }}{% endif %}
+        </span>
+      {% elif own_assignment and own_assignment.status.value == "OPEN" %}
+        {# Erledigt-Button erst ab Periodenstart (Future-Lock). #}
+        {% if today and today >= occurrence.period_start %}
+          <form hx-post="{{ url_for('tasks.mark_done', occurrence_id=occurrence.id) }}"
+                hx-target="#occurrence-{{ occurrence.id }}"
+                hx-swap="outerHTML"
+                method="post"
+                action="{{ url_for('tasks.mark_done', occurrence_id=occurrence.id) }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-accent btn-sm">
+              {{ icon("check", "h-4 w-4") }}
+              Erledigt
+            </button>
+          </form>
+        {% else %}
+          <span class="badge badge-neutral">ab {{ occurrence.period_start.strftime('%d.%m.') }}</span>
+        {% endif %}
+        {# Abgabe an die Börse — Erledigt bleibt daneben sichtbar. #}
+        {% if own_offer %}
+          {{ badge("abgegeben — wartet auf Übernahme", "warning") }}
+          <form hx-post="{{ url_for('tasks.withdraw_offer', offer_id=own_offer.id) }}"
+                hx-target="#occurrence-{{ occurrence.id }}"
+                hx-swap="outerHTML"
+                method="post"
+                action="{{ url_for('tasks.withdraw_offer', offer_id=own_offer.id) }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-ghost btn-sm">
+              {{ icon("undo", "h-4 w-4") }}Zurückziehen
+            </button>
+          </form>
+        {% else %}
+          <details class="text-right">
+            <summary class="btn btn-ghost btn-sm cursor-pointer select-none list-none">
+              {{ icon("users", "h-4 w-4") }}Abgeben
+            </summary>
+            <form hx-post="{{ url_for('tasks.offer', occurrence_id=occurrence.id) }}"
+                  hx-target="#occurrence-{{ occurrence.id }}"
+                  hx-swap="outerHTML"
+                  method="post"
+                  action="{{ url_for('tasks.offer', occurrence_id=occurrence.id) }}"
+                  class="mt-2 space-y-2">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input class="input" type="text" name="note" placeholder="Grund (optional)">
+              <button type="submit" class="btn btn-primary btn-sm btn-block">An die Börse</button>
+            </form>
+          </details>
+        {% endif %}
+      {% elif own_assignment and own_assignment.status.value == "DONE" %}
+        <span class="badge badge-success">
+          {{ icon("check-circle", "h-3.5 w-3.5") }}
+          Erledigt von {{ own_assignment.user.name }}
+        </span>
+      {% endif %}
+      <span class="badge badge-info">{{ definition.difficulty_points }} Pkt</span>
+    </div>
+  </div>
+</li>

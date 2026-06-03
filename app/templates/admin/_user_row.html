@@ -1,0 +1,69 @@
+{# Eine Karte pro User; zugleich HTMX-Antwort nach Mutation.
+   Swap-Ziel ist die Wurzel #user-row-<id> (outerHTML). Standalone gerendert. #}
+{% from "components/ui.html" import badge, avatar, action_form %}
+{% set user_roles = user.roles | map(attribute='role') | list %}
+{% set row_target = "#user-row-" ~ user.id %}
+<div id="user-row-{{ user.id }}" class="data-card space-y-3">
+  {# Kopf: Avatar + Name/E-Mail + Status #}
+  <div class="flex flex-wrap items-start justify-between gap-3">
+    <div class="flex min-w-0 items-center gap-3">
+      {{ avatar(user) }}
+      <div class="min-w-0">
+        <div class="truncate font-bold text-slate-900">
+          {{ user.name }}{% if user.id == current_user.id %} <span class="text-xs font-normal text-slate-400">(du)</span>{% endif %}
+        </div>
+        <div class="truncate text-xs text-slate-500">{{ user.email }}</div>
+      </div>
+    </div>
+    {% if user.status.value == 'PENDING' %}
+      {{ badge("Wartet auf Freischaltung", "warning") }}
+    {% elif user.status.value == 'APPROVED' %}
+      {{ badge("Freigeschaltet", "success") }}
+    {% else %}
+      {{ badge("Abgelehnt", "danger") }}
+    {% endif %}
+  </div>
+
+  {# Meta: Rollen + Beitrittsdatum #}
+  <div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-slate-500">
+    <span class="flex flex-wrap items-center gap-1.5">
+      <span class="kv-label">Rollen:</span>
+      {% if user_roles %}
+        {% for role in user_roles %}{{ badge(role.value, "info") }}{% endfor %}
+      {% else %}<span class="text-slate-400">—</span>{% endif %}
+    </span>
+    <span class="flex items-center gap-1.5">
+      <span class="kv-label">Beigetreten:</span>
+      {% if user.joined_at %}{{ user.joined_at.strftime('%d.%m.%Y') }}{% else %}<span class="text-slate-400">—</span>{% endif %}
+    </span>
+  </div>
+
+  {# Aktionen #}
+  <div class="action-group border-t border-brand-100 pt-3">
+    {% if user.status.value == 'PENDING' %}
+      {{ action_form(url_for('admin.approve', user_id=user.id), "Freischalten", "primary", "check", row_target) }}
+      {{ action_form(url_for('admin.reject', user_id=user.id), "Ablehnen", "danger", "x", row_target) }}
+    {% elif user.status.value == 'APPROVED' %}
+      {% if Role.HAUSBEWOHNER in user_roles %}
+        {{ action_form(url_for('admin.toggle_role', user_id=user.id), "Aus WG nehmen", "ghost", "", row_target, {"role": "HAUSBEWOHNER", "action": "remove"}, "Aus der WG nehmen? Offene Dienste werden neu verteilt.") }}
+      {% else %}
+        {{ action_form(url_for('admin.toggle_role', user_id=user.id), "In WG aufnehmen", "primary", "check", row_target, {"role": "HAUSBEWOHNER", "action": "add"}) }}
+      {% endif %}
+      {% if Role.HAUSWART in user_roles %}
+        {{ action_form(url_for('admin.toggle_role', user_id=user.id), "Hauswart entziehen", "ghost", "", row_target, {"role": "HAUSWART", "action": "remove"}) }}
+      {% else %}
+        {{ action_form(url_for('admin.toggle_role', user_id=user.id), "Hauswart vergeben", "ghost", "", row_target, {"role": "HAUSWART", "action": "add"}) }}
+      {% endif %}
+      {% if can_grant_admin %}
+        {% if Role.ADMIN in user_roles %}
+          {{ action_form(url_for('admin.toggle_role', user_id=user.id), "Admin entziehen", "ghost", "", row_target, {"role": "ADMIN", "action": "remove"}) }}
+        {% else %}
+          {{ action_form(url_for('admin.toggle_role', user_id=user.id), "Admin vergeben", "ghost", "", row_target, {"role": "ADMIN", "action": "add"}) }}
+        {% endif %}
+      {% endif %}
+      {{ action_form(url_for('admin.delete', user_id=user.id), "Entfernen", "danger", "trash", row_target, {}, "Wirklich entfernen?") }}
+    {% else %}
+      {{ action_form(url_for('admin.approve', user_id=user.id), "Wieder freischalten", "primary", "check", row_target) }}
+    {% endif %}
+  </div>
+</div>

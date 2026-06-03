@@ -1,0 +1,89 @@
+{# Partial: ein einzelnes ShoppingItem als <li>.
+
+   Wird sowohl in der Listenansicht als auch als HTMX-Swap-Antwort verwendet.
+   Wenn `item.bought_at` gesetzt ist, gilt das Item als "erledigt".
+#}
+{% from "components/icons.html" import icon %}
+{% set is_done = item.bought_at is not none %}
+<li
+  id="shopping-item-{{ item.id }}"
+  class="card flex items-center justify-between gap-3 {% if is_done %}opacity-60{% endif %}"
+>
+  <div class="min-w-0 flex-1">
+    <div class="flex items-center gap-2.5">
+      {% if is_done %}
+        <span class="flex h-6 w-6 flex-none items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
+          {{ icon("check", "h-4 w-4") }}
+        </span>
+      {% else %}
+        <span class="flex h-6 w-6 flex-none items-center justify-center rounded-full bg-brand-100 text-brand-500">
+          {{ icon("cart", "h-3.5 w-3.5") }}
+        </span>
+      {% endif %}
+      <p class="truncate text-base font-bold text-slate-900 {% if is_done %}line-through{% endif %}">
+        {{ item.title }}
+        {% if item.quantity %}
+          <span class="ml-1 text-sm font-semibold text-slate-500">({{ item.quantity }})</span>
+        {% endif %}
+      </p>
+    </div>
+    <p class="mt-1 pl-[2.25rem] text-xs text-slate-400">
+      {% if is_done %}
+        Erledigt
+        {% if item.bought_by %}von {{ item.bought_by.name }}{% endif %}
+      {% else %}
+        Hinzugefügt
+        {% if item.added_by %}von {{ item.added_by.name }}{% endif %}
+      {% endif %}
+    </p>
+  </div>
+
+  <div class="flex flex-none items-center gap-2">
+    {% if is_done %}
+      <form
+        method="post"
+        action="{{ url_for('shopping.uncheck', item_id=item.id) }}"
+        hx-post="{{ url_for('shopping.uncheck', item_id=item.id) }}"
+        hx-target="#shopping-item-{{ item.id }}"
+        hx-swap="outerHTML"
+      >
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-ghost btn-sm">
+          {{ icon("undo", "h-4 w-4") }}
+          Rückgängig
+        </button>
+      </form>
+    {% else %}
+      <form
+        method="post"
+        action="{{ url_for('shopping.check', item_id=item.id) }}"
+        hx-post="{{ url_for('shopping.check', item_id=item.id) }}"
+        hx-target="#shopping-item-{{ item.id }}"
+        hx-swap="outerHTML"
+      >
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-accent btn-sm">
+          {{ icon("check", "h-4 w-4") }}
+          Erledigt
+        </button>
+      </form>
+    {% endif %}
+
+    {% if can_delete %}
+      <form
+        method="post"
+        action="{{ url_for('shopping.delete', item_id=item.id) }}"
+        hx-post="{{ url_for('shopping.delete', item_id=item.id) }}"
+        hx-target="#shopping-item-{{ item.id }}"
+        hx-swap="delete"
+        hx-confirm="Wirklich löschen?"
+        onsubmit="return confirm('Wirklich löschen?');"
+      >
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" aria-label="Löschen" class="btn btn-danger btn-sm">
+          {{ icon("trash", "h-4 w-4") }}
+        </button>
+      </form>
+    {% endif %}
+  </div>
+</li>

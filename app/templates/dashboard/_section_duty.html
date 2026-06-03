@@ -1,0 +1,29 @@
+{% from "components/icons.html" import icon %}
+{# Aktueller-Dienst-Banner: laufende DIENST-Verantwortung(en) des Users. #}
+{% if current_duties %}
+  <section aria-labelledby="dash-dienst" class="space-y-3">
+    <h2 id="dash-dienst" class="sr-only">Aktueller Dienst</h2>
+    {% for occurrence in current_duties %}
+      {% set definition = occurrence.task_definition %}
+      <div class="card border-l-4 border-brand-400 bg-brand-50/60">
+        <div class="flex flex-wrap items-center gap-4">
+          <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand-500 text-white shadow-soft">
+            {{ icon("shield", "h-6 w-6") }}
+          </span>
+          <div class="min-w-0 flex-1 space-y-1">
+            <p class="text-xs font-bold uppercase tracking-wide text-brand-600">Dein Dienst</p>
+            <p class="text-lg font-extrabold leading-tight text-slate-900">
+              <a href="{{ url_for('tasks.detail', definition_id=definition.id) }}" class="hover:text-brand-700">
+                {{ definition.title }}
+              </a>
+            </p>
+            <p class="text-sm font-bold text-slate-600">
+              bis {{ occurrence.period_end.strftime("%d.%m.") }}
+            </p>
+          </div>
+          <span class="badge badge-info shrink-0">{{ definition.difficulty_points }} Pkt</span>
+        </div>
+      </div>
+    {% endfor %}
+  </section>
+{% endif %}

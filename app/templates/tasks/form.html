@@ -1,0 +1,196 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% from "components/ui.html" import page_header, sub_nav %}
+{% block title %}Neue Aufgabe — WG{% endblock %}
+
+{% block content %}
+<section class="space-y-6">
+  {{ sub_nav([
+    (url_for('tasks.index'), 'mine', 'Meine'),
+    (url_for('tasks.view_all'), 'all', 'WG'),
+    (url_for('tasks.new'), 'new', 'Neu'),
+    (url_for('tasks.manage'), 'manage', 'Verwalten'),
+  ], 'new') }}
+  {{ page_header("Neue Aufgabe", "Lege eine wiederkehrende oder einmalige Aufgabe an.") }}
+
+  {% if errors %}
+    <div class="flex items-center gap-2 rounded-2xl bg-rose-50 p-4 text-sm font-bold text-rose-900 ring-1 ring-inset ring-rose-200">
+      {{ icon("alert", "h-5 w-5 shrink-0 text-rose-600") }}
+      Bitte korrigiere die markierten Felder.
+    </div>
+  {% endif %}
+
+  <form method="post" action="{{ url_for('tasks.create') }}" class="card space-y-5">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="field">
+      <label class="label">Titel</label>
+      <input type="text" name="title" value="{{ form.title }}" required class="input">
+      {% if errors.title %}<p class="field-error">{{ errors.title }}</p>{% endif %}
+    </div>
+
+    <div class="field">
+      <label class="label">Beschreibung</label>
+      <textarea name="description" rows="3" class="input">{{ form.description }}</textarea>
+    </div>
+
+    <div class="field">
+      <label class="label">Typ</label>
+      <select name="kind" class="input">
+        {% for key, label in kind_labels.items() %}
+          <option value="{{ key.value }}" {% if form.kind == key.value %}selected{% endif %}>
+            {{ label }}
+          </option>
+        {% endfor %}
+      </select>
+      <p class="text-xs text-slate-500">
+        Ein <strong>Dienst</strong> trägt die Verantwortung für einen Zeitraum (z.&nbsp;B. Mülldienst für 2 Wochen) und wird am Ende abgehakt.
+      </p>
+    </div>
+
+    <div class="grid gap-4 sm:grid-cols-2">
+      <div class="field">
+        <label class="label">Schwierigkeit (Punkte)</label>
+        <input type="number" name="difficulty_points" min="{{ min_points }}" max="{{ max_points }}"
+               value="{{ form.difficulty_points }}" class="input">
+        {% if errors.difficulty_points %}
+          <p class="field-error">{{ errors.difficulty_points }}</p>
+        {% endif %}
+      </div>
+
+      <div class="field">
+        <label class="label">Anzahl Bewohner pro Auftrag</label>
+        <input type="number" name="required_assignees" min="1" value="{{ form.required_assignees }}" class="input">
+        {% if errors.required_assignees %}
+          <p class="field-error">{{ errors.required_assignees }}</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="grid gap-4 sm:grid-cols-2">
+      <div class="field">
+        <label class="label">Wiederholung</label>
+        <select name="recurrence" id="recurrence-select" class="input">
+          {% for key, label in recurrence_labels.items() %}
+            <option value="{{ key.value }}" {% if form.recurrence == key.value %}selected{% endif %}>
+              {{ label }}
+            </option>
+          {% endfor %}
+        </select>
+        {% if errors.recurrence %}<p class="field-error">{{ errors.recurrence }}</p>{% endif %}
+      </div>
+
+      {# Wochentag — nur bei WEEKLY / BIWEEKLY relevant. #}
+      <div class="field" data-recurrence-field="weekday">
+        <label class="label">Wochentag</label>
+        <select name="anchor_weekday" class="input">
+          {% for label in weekday_labels %}
+            <option value="{{ loop.index0 }}"
+                    {% if form.anchor_weekday|string == loop.index0|string %}selected{% endif %}>
+              {{ label }}
+            </option>
+          {% endfor %}
+        </select>
+        <p class="text-xs text-slate-500">Nur bei „Wöchentlich“ / „Alle 2 Wochen“.</p>
+        {% if errors.anchor_weekday %}<p class="field-error">{{ errors.anchor_weekday }}</p>{% endif %}
+      </div>
+
+      {# Tag im Monat — nur bei MONTHLY relevant. #}
+      <div class="field" data-recurrence-field="dom">
+        <label class="label">Tag im Monat (1–28)</label>
+        <input type="number" name="anchor_day_of_month" min="1" max="28"
+               value="{{ form.anchor_day_of_month }}" class="input">
+        <p class="text-xs text-slate-500">Nur bei „Monatlich“.</p>
+        {% if errors.anchor_day_of_month %}<p class="field-error">{{ errors.anchor_day_of_month }}</p>{% endif %}
+      </div>
+
+      {# Eigenes Intervall — nur bei CUSTOM relevant. #}
+      <div class="field" data-recurrence-field="interval">
+        <label class="label">Eigenes Intervall (Tage)</label>
+        <input type="number" name="recurrence_interval_days" min="1"
+               value="{{ form.recurrence_interval_days }}" class="input">
+        <p class="text-xs text-slate-500">Nur bei „Eigene“.</p>
+        {% if errors.recurrence_interval_days %}<p class="field-error">{{ errors.recurrence_interval_days }}</p>{% endif %}
+      </div>
+    </div>
+
+    <div class="field" data-recurrence-field="due">
+      <label class="label">Fälligkeitsdatum (nur einmalige Aufgaben)</label>
+      <input type="date" name="due_date" value="{{ form.due_date }}" class="input">
+      {% if errors.due_date %}<p class="field-error">{{ errors.due_date }}</p>{% endif %}
+    </div>
+
+    <div class="field">
+      <label class="label">Eingeschränkte Bewohner</label>
+      <p class="text-xs text-slate-500">Wenn nichts ausgewählt ist, sind alle Hausbewohner zugelassen.</p>
+      <div class="mt-2 grid gap-2 sm:grid-cols-2">
+        {% for u in hausbewohner %}
+          <label class="flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-brand-300 hover:bg-brand-50 has-[:checked]:border-brand-400 has-[:checked]:bg-brand-50 has-[:checked]:text-brand-800">
+            <input type="checkbox" name="eligible_user_ids" value="{{ u.id }}"
+                   class="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-200"
+                   {% if u.id|string in form.eligible_user_ids %}checked{% endif %}>
+            {{ u.name }}
+          </label>
+        {% endfor %}
+      </div>
+    </div>
+
+    {# Entwurf: nur für wiederkehrende Aufgaben sinnvoll (per JS bei „Einmalig“
+       ausgeblendet). is_active=False ⇒ keine Occurrences, keine Zuweisung. #}
+    <div class="field" data-draft-field>
+      <label class="flex cursor-pointer items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-brand-300 hover:bg-brand-50 has-[:checked]:border-brand-400 has-[:checked]:bg-brand-50 has-[:checked]:text-brand-800">
+        <input type="checkbox" name="save_as_draft" value="1"
+               class="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-200"
+               {% if form.save_as_draft %}checked{% endif %}>
+        Als Entwurf speichern (noch nicht aktiv — keine Zuweisung)
+      </label>
+      <p class="text-xs text-slate-500">
+        Aktiviere die Aufgabe später unter „Verwalten“, wenn genug Bewohner da sind.
+      </p>
+    </div>
+
+    <div class="flex items-center gap-3">
+      <button type="submit" class="btn btn-primary">
+        {{ icon("plus", "h-4 w-4") }}Aufgabe anlegen
+      </button>
+      <a href="{{ url_for('tasks.index') }}" class="btn btn-ghost">
+        Abbrechen
+      </a>
+    </div>
+  </form>
+</section>
+
+<script>
+  // Blendet die je nach Wiederholung relevanten Felder ein/aus.
+  (function () {
+    var select = document.getElementById("recurrence-select");
+    if (!select) return;
+
+    // Recurrence-Wert -> sichtbare data-recurrence-field-Keys.
+    var visibleFor = {
+      "NONE": ["due"],
+      "DAILY": [],
+      "WEEKLY": ["weekday"],
+      "BIWEEKLY": ["weekday"],
+      "MONTHLY": ["dom"],
+      "CUSTOM": ["interval"],
+    };
+
+    function apply() {
+      var show = visibleFor[select.value] || [];
+      var fields = document.querySelectorAll("[data-recurrence-field]");
+      fields.forEach(function (el) {
+        var key = el.getAttribute("data-recurrence-field");
+        el.style.display = show.indexOf(key) !== -1 ? "" : "none";
+      });
+      // Entwurf nur für wiederkehrende Aufgaben — bei „Einmalig“ ausblenden.
+      var draftField = document.querySelector("[data-draft-field]");
+      if (draftField) {
+        draftField.style.display = select.value === "NONE" ? "none" : "";
+      }
+    }
+
+    select.addEventListener("change", apply);
+    apply();
+  })();
+</script>
+{% endblock %}

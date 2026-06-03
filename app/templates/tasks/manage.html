@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% from "components/ui.html" import page_header, sub_nav, empty_state, badge, task_type_badge %}
+{% block title %}Aufgaben verwalten — WG{% endblock %}
+
+{% macro definition_meta(d, recurrence_labels) %}
+  <div class="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+    {{ task_type_badge(d) }}
+    <span>{{ recurrence_labels[d.recurrence] }}</span>
+    <span>· {{ d.required_assignees }} Bewohner</span>
+  </div>
+{% endmacro %}
+
+{% block content %}
+<section class="space-y-6">
+  {% set tabs = [
+    (url_for('tasks.index'), 'mine', 'Meine'),
+    (url_for('tasks.view_all'), 'all', 'WG'),
+  ] %}
+  {% if can_create %}{% set tabs = tabs + [(url_for('tasks.new'), 'new', 'Neu'), (url_for('tasks.manage'), 'manage', 'Verwalten')] %}{% endif %}
+  {{ sub_nav(tabs, 'manage') }}
+  {{ page_header("Aufgaben verwalten", "Entwürfe aktivieren oder aktive Aufgaben deaktivieren.") }}
+
+  {# ---------- Entwürfe ---------- #}
+  <div class="space-y-3">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <h2 class="text-sm font-extrabold uppercase tracking-wide text-slate-500">Entwürfe</h2>
+      {% if drafts %}
+        <form method="post" action="{{ url_for('tasks.activate_all') }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn btn-primary btn-sm">
+            {{ icon("check", "h-4 w-4") }}<span>Alle aktivieren</span>
+          </button>
+        </form>
+      {% endif %}
+    </div>
+
+    {% if drafts %}
+      <div class="space-y-2">
+        {% for d in drafts %}
+          <div class="card flex flex-wrap items-center justify-between gap-3">
+            <div class="min-w-0 space-y-1.5">
+              <div class="flex items-center gap-2">
+                <a href="{{ url_for('tasks.detail', definition_id=d.id) }}"
+                   class="truncate font-bold text-slate-900 hover:text-brand-700">{{ d.title }}</a>
+                {{ badge("Entwurf", "warning") }}
+              </div>
+              {{ definition_meta(d, recurrence_labels) }}
+            </div>
+            <form method="post" action="{{ url_for('tasks.activate', definition_id=d.id) }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn btn-primary btn-sm">
+                {{ icon("check", "h-4 w-4") }}<span>Aktivieren</span>
+              </button>
+            </form>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      {{ empty_state("sparkle", "Keine Entwürfe", "Neue Aufgaben kannst du beim Anlegen als Entwurf speichern.") }}
+    {% endif %}
+  </div>
+
+  {# ---------- Aktive Aufgaben ---------- #}
+  <div class="space-y-3">
+    <h2 class="text-sm font-extrabold uppercase tracking-wide text-slate-500">Aktive Aufgaben</h2>
+
+    {% if active %}
+      <div class="space-y-2">
+        {% for d in active %}
+          <div class="card flex flex-wrap items-center justify-between gap-3">
+            <div class="min-w-0 space-y-1.5">
+              <div class="flex items-center gap-2">
+                <a href="{{ url_for('tasks.detail', definition_id=d.id) }}"
+                   class="truncate font-bold text-slate-900 hover:text-brand-700">{{ d.title }}</a>
+                {{ badge("Aktiv", "success") }}
+              </div>
+              {{ definition_meta(d, recurrence_labels) }}
+            </div>
+            <form method="post" action="{{ url_for('tasks.deactivate', definition_id=d.id) }}"
+                  onsubmit="return confirm('Aufgabe deaktivieren? Es werden keine neuen Termine mehr erzeugt.');">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn btn-ghost btn-sm">
+                {{ icon("x", "h-4 w-4") }}<span>Deaktivieren</span>
+              </button>
+            </form>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      {{ empty_state("sparkle", "Keine aktiven Aufgaben") }}
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

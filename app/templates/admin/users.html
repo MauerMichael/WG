@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% from "components/ui.html" import page_header, empty_state %}
+
+{% block title %}Benutzer verwalten – WG{% endblock %}
+
+{% block content %}
+<section class="space-y-6">
+  {% include "components/_verwaltung_subnav.html" %}
+  {{ page_header("Nutzer", "Verwaltung") }}
+
+  {# Karten-Liste statt Tabelle: kein horizontales Scrollen auf dem Handy. #}
+  {% if users %}
+    <div class="space-y-3">
+      {% for user in users %}
+        {% include "admin/_user_row.html" %}
+      {% endfor %}
+    </div>
+  {% else %}
+    {{ empty_state("users", "Keine Benutzer vorhanden.") }}
+  {% endif %}
+</section>
+{% endblock %}

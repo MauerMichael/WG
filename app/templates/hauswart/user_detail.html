@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% from "components/ui.html" import badge, page_header, empty_state, stat_tile %}
+
+{% block title %}{{ user.name }} – Hauswart – WG{% endblock %}
+
+{% block content %}
+<section class="space-y-6">
+  {% set back_btn %}
+    <a href="{{ url_for('hauswart.index') }}" class="btn btn-ghost btn-sm">
+      {{ icon("undo", "h-4 w-4") }}Zurück
+    </a>
+  {% endset %}
+  {{ page_header(user.name, "7-Tage-Verlauf", back_btn) }}
+
+  {# Statistik-Zusammenfassung. #}
+  <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+    {{ stat_tile(stats.completed, "erledigt", "emerald") }}
+    {{ stat_tile(stats.points, "Punkte", "gold") }}
+    {{ stat_tile(stats.missed, "verpasst", "rose") }}
+    <div class="stat-tile">
+      {% if stats.reliability is not none %}
+        {% set pct = (stats.reliability * 100) | round | int %}
+        {% if pct >= 80 %}
+          {{ badge("Zuverlässigkeit " ~ pct ~ "%", "success") }}
+        {% elif pct >= 50 %}
+          {{ badge("Zuverlässigkeit " ~ pct ~ "%", "warning") }}
+        {% else %}
+          {{ badge("Zuverlässigkeit " ~ pct ~ "%", "danger") }}
+        {% endif %}
+      {% else %}
+        {{ badge("noch keine Daten", "neutral") }}
+      {% endif %}
+    </div>
+  </div>
+
+  {# Verlauf der letzten 7 Tage — gleiche Review-Zeilen wie die Queue. #}
+  <div class="space-y-3">
+    {% if items %}
+      {% for assignment in items %}
+        {% include "hauswart/_review_row.html" %}
+      {% endfor %}
+    {% else %}
+      {{ empty_state("calendar", "Keine Einträge", "In den letzten 7 Tagen gab es nichts.") }}
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

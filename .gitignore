@@ -1,0 +1,71 @@
+# Environment / Secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+env/
+ENV/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+logs/
+
+# Frontend (falls sp�ter dazukommt)
+node_modules/
+dist/
+build/
+.next/
+.nuxt/
+.cache/
+
+# Database
+*.sqlite
+*.sqlite3
+*.db
+
+# Claude (user-config + sessions, kein Projekt-Code)
+.claude/
+.claude/settings.local.json
+
+# Lokale Dev-Test-Accounts (vom Seed-Skript erzeugt)
+test_accounts.txt
+
+# Tailwind standalone CLI (per-machine binary)
+tools/
+# Tailwind build output (regenerated)
+app/static/css/output.css
+
+# Test- und Lint-Caches
+.pytest_cache/
+.ruff_cache/
+
+# Python compiled
+*.pyc
+__pycache__/

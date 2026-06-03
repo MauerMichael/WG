@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% from "components/ui.html" import page_header, empty_state %}
+
+{% block title %}Einkaufsliste – WG{% endblock %}
+
+{% block content %}
+<section class="space-y-6">
+  {{ page_header("Einkauf", "Was muss noch in den Korb?") }}
+
+  <form
+    method="post"
+    action="{{ url_for('shopping.create') }}"
+    hx-post="{{ url_for('shopping.create') }}"
+    hx-target="#open-items"
+    hx-swap="afterbegin"
+    hx-on::after-request="if(event.detail.successful){this.reset(); document.getElementById('title').focus();}"
+    class="card flex flex-wrap items-end gap-3"
+  >
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="field flex-1 min-w-[10rem]">
+      <label class="label" for="title">Titel</label>
+      <input
+        type="text"
+        id="title"
+        name="title"
+        required
+        maxlength="255"
+        placeholder="z.B. Milch"
+        class="input"
+      />
+    </div>
+    <div class="field w-32">
+      <label class="label" for="quantity">Menge</label>
+      <input
+        type="text"
+        id="quantity"
+        name="quantity"
+        maxlength="100"
+        placeholder="z.B. 2x"
+        class="input"
+      />
+    </div>
+    <button type="submit" class="btn btn-primary">
+      {{ icon("plus", "h-4 w-4") }}
+      Hinzufügen
+    </button>
+  </form>
+
+  <div class="space-y-3">
+    <h2 class="text-lg font-extrabold tracking-tight text-slate-900">Zu kaufen</h2>
+    <ul id="open-items" class="space-y-2">
+      {% for item in open_items %}
+        {% set can_delete = can_delete_map.get(item.id, False) %}
+        {% include "shopping/_item.html" with context %}
+      {% else %}
+        <li>
+          {{ empty_state("cart", "Keine offenen Items.", "Füg oben etwas hinzu, das eingekauft werden muss.") }}
+        </li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  <div class="space-y-3">
+    <h2 class="text-lg font-extrabold tracking-tight text-slate-900">Kürzlich gekauft</h2>
+    <p class="text-xs text-slate-400">letzte 14 Tage</p>
+    <ul id="done-items" class="space-y-2">
+      {% for item in done_items %}
+        {% set can_delete = can_delete_map.get(item.id, False) %}
+        {% include "shopping/_item.html" with context %}
+      {% else %}
+        <li>
+          {{ empty_state("check-circle", "Nichts erledigt in den letzten 14 Tagen.") }}
+        </li>
+      {% endfor %}
+    </ul>
+  </div>
+</section>
+{% endblock %}

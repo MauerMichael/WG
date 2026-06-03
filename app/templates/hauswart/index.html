@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% from "components/ui.html" import badge, page_header, empty_state, avatar %}
+
+{% block title %}Hauswart – WG{% endblock %}
+
+{% block content %}
+<section class="space-y-6">
+  {% include "components/_verwaltung_subnav.html" %}
+  {{ page_header("Hauswart", "Erledigte Aufgaben prüfen") }}
+
+  {# Filter- und Sortier-Leiste. Submit-on-change ohne JS-Frameworks. #}
+  <form method="get" action="{{ url_for('hauswart.index') }}"
+        class="card flex flex-wrap items-end gap-3">
+    <div class="field min-w-[12rem] flex-1">
+      <label class="label" for="filter-user">Bewohner</label>
+      <select id="filter-user" class="input" name="user_id"
+              onchange="this.form.submit()">
+        <option value="">Alle Bewohner</option>
+        {% for resident in residents %}
+          <option value="{{ resident.id }}"
+                  {% if selected_user_id and resident.id == selected_user_id %}selected{% endif %}>
+            {{ resident.name }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field min-w-[14rem] flex-1">
+      <label class="label" for="filter-sort">Sortierung</label>
+      <select id="filter-sort" class="input" name="sort"
+              onchange="this.form.submit()">
+        <option value="date" {% if selected_sort == 'date' %}selected{% endif %}>
+          Datum (älteste zuerst)
+        </option>
+        <option value="type" {% if selected_sort == 'type' %}selected{% endif %}>
+          Typ (Dienst/Event/Wiederholend/Einmalig)
+        </option>
+      </select>
+    </div>
+    <div class="flex items-center gap-2">
+      <noscript>
+        <button type="submit" class="btn btn-primary btn-sm">Anwenden</button>
+      </noscript>
+      {% if selected_user_id or selected_sort != 'date' %}
+        <a href="{{ url_for('hauswart.index') }}" class="btn btn-ghost btn-sm">
+          {{ icon("undo", "h-4 w-4") }}Zurücksetzen
+        </a>
+      {% endif %}
+    </div>
+  </form>
+
+  {% if groups %}
+    <div class="space-y-6">
+      {% for user, items in groups.items() %}
+        {% set st = stats.get(user.id) %}
+        <div class="card space-y-4">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <a href="{{ url_for('hauswart.user_detail', user_id=user.id) }}"
+               class="flex items-center gap-3">
+              {% if user.avatar_url %}
+                <img src="{{ user.avatar_url }}" alt="" class="h-11 w-11 rounded-full object-cover ring-2 ring-brand-100">
+              {% else %}
+                <span class="flex h-11 w-11 items-center justify-center rounded-full bg-brand-100 text-base font-extrabold text-brand-700">
+                  {{ user.name[:1] | upper if user.name else '?' }}
+                </span>
+              {% endif %}
+              <span class="text-lg font-extrabold text-slate-900">{{ user.name }}</span>
+            </a>
+            <div class="flex items-center gap-2">
+              {% if st and st.reliability is not none %}
+                {% set pct = (st.reliability * 100) | round | int %}
+                {% if pct >= 80 %}
+                  {{ badge("Zuverlässigkeit " ~ pct ~ "%", "success") }}
+                {% elif pct >= 50 %}
+                  {{ badge("Zuverlässigkeit " ~ pct ~ "%", "warning") }}
+                {% else %}
+                  {{ badge("Zuverlässigkeit " ~ pct ~ "%", "danger") }}
+                {% endif %}
+              {% else %}
+                {{ badge("noch keine Daten", "neutral") }}
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="space-y-3">
+            {% for assignment in items %}
+              {% include "hauswart/_review_row.html" %}
+            {% endfor %}
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% elif selected_user_id %}
+    {{ empty_state("check", "Nichts zu prüfen", "Dieser Bewohner hat aktuell nichts in der Review-Queue.") }}
+  {% else %}
+    {{ empty_state("check-circle", "Alles geprüft.", "Aktuell wartet nichts auf deine Prüfung.") }}
+  {% endif %}
+
+  {# Verteil-Score-Tabelle: spiegelt die Fairness-Verteilung wider + führt zur
+     Personen-Ansicht. Höherer Score = mehr beigetragen → kommt seltener dran. #}
+  <div class="card space-y-4">
+    <div class="space-y-1">
+      <h2 class="text-sm font-extrabold uppercase tracking-wide text-slate-500">Verteil-Score</h2>
+      <p class="text-xs text-slate-400">
+        Höherer Score = mehr beigetragen → kommt seltener dran.
+        {% if avg_score is not none %}
+          Haushalts-Schnitt:
+          <span class="font-bold text-slate-600">{{ "%.1f"|format(avg_score) }}</span>.
+        {% endif %}
+      </p>
+    </div>
+
+    {% if score_rows %}
+      <div class="-mx-1 overflow-x-auto">
+        <table class="w-full min-w-[20rem] border-collapse text-left text-sm">
+          <thead>
+            <tr class="border-b border-brand-100 text-xs uppercase tracking-wide text-slate-400">
+              <th scope="col" class="py-2 pl-1 pr-2 font-bold">#</th>
+              <th scope="col" class="py-2 pr-2 font-bold">Bewohner</th>
+              <th scope="col" class="py-2 pr-2 text-right font-bold">Score</th>
+              <th scope="col" class="py-2 pl-2 pr-1 text-right font-bold">Zuverlässigkeit</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-brand-50">
+            {% for row in score_rows %}
+              {% set st = row.stats %}
+              <tr class="group transition hover:bg-brand-50/50">
+                <td class="py-2.5 pl-1 pr-2 align-middle">
+                  <span class="font-display text-base font-extrabold text-slate-300">{{ loop.index }}</span>
+                </td>
+                <td class="py-2.5 pr-2 align-middle">
+                  <a href="{{ url_for('hauswart.user_detail', user_id=row.user.id) }}"
+                     class="flex items-center gap-2.5 font-bold text-slate-800 group-hover:text-brand-700">
+                    {{ avatar(row.user, "h-9 w-9") }}
+                    <span class="truncate">{{ row.user.name }}</span>
+                  </a>
+                </td>
+                <td class="py-2.5 pr-2 text-right align-middle">
+                  <span class="font-display text-lg font-extrabold text-gold-600">{{ "%.1f"|format(row.score) }}</span>
+                </td>
+                <td class="py-2.5 pl-2 pr-1 text-right align-middle">
+                  {% if st.reliability is not none %}
+                    {% set pct = (st.reliability * 100) | round | int %}
+                    {% if pct >= 80 %}
+                      {{ badge(pct ~ "%", "success") }}
+                    {% elif pct >= 50 %}
+                      {{ badge(pct ~ "%", "warning") }}
+                    {% else %}
+                      {{ badge(pct ~ "%", "danger") }}
+                    {% endif %}
+                  {% else %}
+                    {{ badge("–", "neutral") }}
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="text-sm text-slate-400">Keine Bewohner vorhanden.</p>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

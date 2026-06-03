@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% from "components/ui.html" import badge %}
+
+{% block title %}{{ user.name }} – Benutzer{% endblock %}
+
+{% block content %}
+<section class="space-y-6">
+  <a href="{{ url_for('admin.users') }}" class="btn btn-ghost btn-sm">
+    {{ icon("chevron-right", "h-4 w-4 rotate-180") }}Zurück zur Benutzerliste
+  </a>
+
+  <div class="card space-y-6">
+    <header class="flex items-center gap-4">
+      {% if user.avatar_url %}
+        <img src="{{ user.avatar_url }}" alt="" class="h-16 w-16 rounded-full object-cover ring-2 ring-brand-100">
+      {% else %}
+        <span class="flex h-16 w-16 items-center justify-center rounded-full bg-brand-100 text-2xl font-extrabold text-brand-700">
+          {{ user.name[:1] | upper if user.name else '?' }}
+        </span>
+      {% endif %}
+      <div class="space-y-1">
+        <h1 class="text-2xl font-extrabold tracking-tight text-slate-900">{{ user.name }}</h1>
+        <p class="text-sm text-slate-500">{{ user.email }}</p>
+      </div>
+    </header>
+
+    <dl class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div class="card-muted">
+        <dt class="text-xs font-bold uppercase tracking-wide text-slate-500">Status</dt>
+        <dd class="mt-2">
+          {% if user.status.value == 'PENDING' %}
+            {{ badge("Wartet auf Freischaltung", "warning") }}
+          {% elif user.status.value == 'APPROVED' %}
+            {{ badge("Freigeschaltet", "success") }}
+          {% else %}
+            {{ badge("Abgelehnt", "danger") }}
+          {% endif %}
+        </dd>
+      </div>
+      <div class="card-muted">
+        <dt class="text-xs font-bold uppercase tracking-wide text-slate-500">Beigetreten</dt>
+        <dd class="mt-2 text-sm font-bold text-slate-900">
+          {% if user.joined_at %}{{ user.joined_at.strftime('%d.%m.%Y') }}{% else %}—{% endif %}
+        </dd>
+      </div>
+      <div class="card-muted sm:col-span-2">
+        <dt class="text-xs font-bold uppercase tracking-wide text-slate-500">Rollen</dt>
+        <dd class="mt-2">
+          {% set user_roles = user.roles | map(attribute='role') | list %}
+          {% if user_roles %}
+            <div class="flex flex-wrap gap-1">
+              {% for role in user_roles %}
+                {{ badge(role.value, "info") }}
+              {% endfor %}
+            </div>
+          {% else %}
+            <span class="text-xs text-slate-400">Keine Rollen</span>
+          {% endif %}
+        </dd>
+      </div>
+    </dl>
+  </div>
+</section>
+{% endblock %}

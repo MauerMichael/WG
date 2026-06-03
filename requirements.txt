@@ -1,0 +1,14 @@
+Flask>=3.0
+Flask-SQLAlchemy>=3.1
+Flask-Login>=0.6
+Flask-WTF>=1.2
+SQLAlchemy>=2.0
+alembic>=1.13
+Authlib>=1.3
+requests>=2.31
+pg8000>=1.31
+python-dotenv>=1.2
+email-validator
+# Prod-WSGI-Server. Lokal nicht zwingend (flask run reicht), aber im Deploy
+# pflicht — `flask run` ist nur ein Dev-Server.
+gunicorn>=22.0

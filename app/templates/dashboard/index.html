@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}Übersicht – WG{% endblock %}
+
+{% from "components/ui.html" import page_header %}
+{% from "components/icons.html" import icon %}
+
+{% block content %}
+<section class="space-y-6">
+  {# 1. Hero: Begruessung + Datum, danach (falls vorhanden) Dienst-Banner. #}
+  {{ page_header("Hallo, " ~ vorname, subtitle=today_human) }}
+  {% include "dashboard/_section_duty.html" %}
+
+  {# Börsen-Hinweis: nur wenn gerade Aufgaben zur Übernahme frei sind. #}
+  {% if open_offers_count %}
+    <a href="{{ url_for('tasks.boerse') }}"
+       class="card flex items-center justify-between gap-3 border-l-4 border-accent-400 transition hover:bg-brand-50">
+      <span class="flex items-center gap-2 text-sm font-bold text-slate-700">
+        <span class="flex h-9 w-9 items-center justify-center rounded-full bg-accent-100 text-accent-700">
+          {{ icon("users", "h-5 w-5") }}
+        </span>
+        {{ open_offers_count }} Aufgabe{{ "n" if open_offers_count != 1 }} zur Übernahme frei
+      </span>
+      <span class="badge badge-warning">Zur Börse</span>
+    </a>
+  {% endif %}
+
+  {# 2. Statistik-Karte: 4 KPIs nebeneinander. #}
+  {% include "dashboard/_section_stats.html" %}
+
+  {# 3. „Heute" + „Diese Woche" — gestapelt mobil, 2-spaltig ab md. #}
+  <div class="grid gap-6 md:grid-cols-2 md:items-start">
+    {% include "dashboard/_section_today.html" %}
+    {% include "dashboard/_section_week.html" %}
+  </div>
+
+  {# 4. Einkauf Top-5 + Abwesenheiten — kompakt 2-spaltig ab md. #}
+  <div class="grid gap-6 md:grid-cols-2 md:items-start">
+    {% include "dashboard/_section_shopping.html" %}
+    {% include "dashboard/_section_absences.html" %}
+  </div>
+
+  {# 5. WG-Score-Footer (klein, ohne Extras-CTA). #}
+  {% include "dashboard/_score_footer.html" %}
+</section>
+{% endblock %}

@@ -1,0 +1,16 @@
+# WG-Organise — Cron-Referenz für Prod (Hostinger, Docker/Linux)
+#
+# Diese Datei ist die versionierte REFERENZ für die geplanten Jobs. Sie wird nicht
+# automatisch aktiv — entweder per `crontab ops/crontab` (Host) installieren, im
+# Container per `COPY ops/crontab /etc/cron.d/wg` einbinden, oder die Zeilen in den
+# bestehenden Host-Cron übernehmen. Pfade ggf. an das Deployment anpassen.
+#
+# WICHTIG: `generate_occurrences.py` MUSS täglich laufen — nur dann gilt die
+# Garantie "jede Aufgabe ist >= 1 Woche im Voraus zugewiesen" (MIN_NOTICE_DAYS=7).
+# Für mehr Puffer (z. B. bei verpasstem Lauf) entweder 2x täglich laufen lassen
+# oder MIN_NOTICE_DAYS in app/domain/points.py erhöhen (Vielfaches von 7 wählen).
+
+# m h dom mon dow  command
+0  3 * * *  cd /app && /app/venv/bin/python scripts/generate_occurrences.py   >> /var/log/wg/generate.log 2>&1
+15 3 * * *  cd /app && /app/venv/bin/python scripts/apply_overdue_penalties.py >> /var/log/wg/penalties.log 2>&1
+30 3 * * *  cd /app && /app/venv/bin/python scripts/send_reminders.py          >> /var/log/wg/reminders.log 2>&1

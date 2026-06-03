@@ -1,0 +1,42 @@
+{# Partial: eine einzelne Grid-Zelle (ein Tag, ein User).
+
+   Wird in der Grid-Ansicht UND als HTMX-Swap-Antwort des Toggle-Endpoints
+   verwendet. Grün = anwesend, Rot = abwesend. Klickbar nur, wenn der
+   Betrachter diesen User toggeln darf (eigene Zelle oder Hauswart/Admin).
+
+   `cell` ist ein Dict: user_id, date, is_absent, is_today, is_weekend,
+   can_toggle.
+#}
+<td
+  id="cell-{{ cell.user_id }}-{{ cell.date.isoformat() }}"
+  class="p-0.5 align-middle"
+>
+  {% if cell.can_toggle %}
+    <button
+      type="button"
+      hx-post="{{ url_for('absences.toggle') }}"
+      hx-vals='{"user_id": "{{ cell.user_id }}", "date": "{{ cell.date.isoformat() }}"}'
+      hx-target="#cell-{{ cell.user_id }}-{{ cell.date.isoformat() }}"
+      hx-swap="outerHTML"
+      aria-label="{{ cell.date.strftime('%d.%m.%Y') }} umschalten"
+      title="{{ cell.date.strftime('%d.%m.%Y') }} – {% if cell.is_absent %}abwesend{% else %}anwesend{% endif %}"
+      class="flex h-11 w-full items-center justify-center rounded-xl text-xs font-bold transition
+        {% if cell.is_absent %}
+          bg-rose-500 text-white hover:bg-rose-600
+        {% else %}
+          bg-emerald-500 text-white hover:bg-emerald-600
+        {% endif %}
+        {% if cell.is_today %}ring-2 ring-gold-400 ring-offset-1{% endif %}"
+    >
+      <span class="sr-only">{% if cell.is_absent %}abwesend{% else %}anwesend{% endif %}</span>
+    </button>
+  {% else %}
+    <div
+      aria-label="{{ cell.date.strftime('%d.%m.%Y') }} – {% if cell.is_absent %}abwesend{% else %}anwesend{% endif %}"
+      title="{{ cell.date.strftime('%d.%m.%Y') }} – {% if cell.is_absent %}abwesend{% else %}anwesend{% endif %}"
+      class="h-11 w-full rounded-xl opacity-60
+        {% if cell.is_absent %}bg-rose-400{% else %}bg-emerald-400{% endif %}
+        {% if cell.is_today %}ring-2 ring-gold-400 ring-offset-1{% endif %}"
+    ></div>
+  {% endif %}
+</td>
