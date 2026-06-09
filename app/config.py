@@ -65,5 +65,11 @@ class DevConfig(BaseConfig):
 
 class ProdConfig(BaseConfig):
     DEBUG: bool = False
-    SESSION_COOKIE_SECURE: bool = True
+    # SECURE-Cookie standardmaessig an; ueber Env abschaltbar, falls die App
+    # (noch) ohne HTTPS lauft (Browser blockt sonst die Session ueber HTTP und
+    # Flask-WTF wirft "CSRF session token is missing"). In .env:
+    # SESSION_COOKIE_SECURE=false
+    SESSION_COOKIE_SECURE: bool = (
+        os.environ.get("SESSION_COOKIE_SECURE", "true").lower() != "false"
+    )
     DEV_LOGIN_ENABLED: bool = False
