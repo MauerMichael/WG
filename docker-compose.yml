@@ -17,6 +17,7 @@ services:
     build: .
     container_name: wg-app
     restart: unless-stopped
+    env_file: .env
     ports:
       - "8000:8000"
     extra_hosts:
