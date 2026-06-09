@@ -181,6 +181,11 @@ _PUBLIC_ENDPOINTS = frozenset(
         "auth.logout",
         "auth.dev_login",
         "auth.dev_login_as",
+        # PWA: Browser holt Manifest/Service-Worker anonym (auch auf der
+        # Login-Seite); Offline-Seite muss ebenfalls ohne Session laden.
+        "pwa.manifest",
+        "pwa.service_worker",
+        "pwa.offline",
     }
 )
 

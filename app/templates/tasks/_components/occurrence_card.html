@@ -73,8 +73,11 @@
           Erledigt{% if done_by %} von {{ done_by|join(', ') }}{% endif %}
         </span>
       {% elif own_assignment and own_assignment.status.value == "OPEN" %}
-        {# Erledigt-Button erst ab Periodenstart (Future-Lock). #}
-        {% if today and today >= occurrence.period_start %}
+        {% if definition.kind.value == "DIENST" %}
+          {# Dienste werden nicht vom Bewohner abgehakt — Hauswart prüft am Periodenende. #}
+          <span class="badge badge-neutral">Hauswart prüft am {{ occurrence.period_end.strftime('%d.%m.') }}</span>
+        {% elif today and today >= occurrence.period_start %}
+          {# Erledigt-Button erst ab Periodenstart (Future-Lock). #}
           <form hx-post="{{ url_for('tasks.mark_done', occurrence_id=occurrence.id) }}"
                 hx-target="#occurrence-{{ occurrence.id }}"
                 hx-swap="outerHTML"

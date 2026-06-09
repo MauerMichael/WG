@@ -1,0 +1,36 @@
+{#
+  Offline-Fallback-Seite. Wird vom Service-Worker (sw.js) vorgeladen und bei
+  fehlgeschlagener Navigation aus dem Cache ausgeliefert -> bewusst STANDALONE
+  (kein `extends base.html`, keine Macros, keine current_user-/DB-Zugriffe).
+#}
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#7c3aed">
+  <title>Offline – WG</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/output.css') }}">
+</head>
+<body class="flex min-h-screen items-center justify-center bg-surface px-4 text-slate-900 antialiased">
+  <div class="card w-full max-w-sm text-center">
+    <span class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-600 text-white shadow-soft">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" viewBox="0 0 24 24"
+           fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M3 10.5 12 3l9 7.5"/>
+        <path d="M5 9.5V20a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9.5"/>
+        <path d="M9.5 21v-6h5v6"/>
+      </svg>
+    </span>
+    <h1 class="text-xl font-extrabold tracking-tight">Gerade offline</h1>
+    <p class="mt-2 text-sm text-slate-600">
+      Du bist nicht mit dem Internet verbunden. Sobald du wieder online bist,
+      kannst du einfach weitermachen.
+    </p>
+    <button type="button" onclick="location.reload()" class="btn btn-primary mt-5 w-full">
+      Erneut versuchen
+    </button>
+  </div>
+</body>
+</html>

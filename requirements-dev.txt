@@ -2,3 +2,5 @@
 pytest
 pytest-flask
 ruff
+# Nur für scripts/generate_icons.py (PWA-/Favicon-Icons bauen) — kein Runtime-Dep.
+Pillow

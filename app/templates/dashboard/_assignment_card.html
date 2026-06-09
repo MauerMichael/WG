@@ -14,22 +14,27 @@
         </span>
       </div>
     </div>
-    <form
-      method="post"
-      action="/tasks/{{ occurrence.id }}/done"
-      hx-post="/tasks/{{ occurrence.id }}/done"
-      hx-target="closest li"
-      hx-swap="outerHTML"
-      class="shrink-0"
-    >
-  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <button
-        type="submit"
-        class="btn btn-accent btn-sm"
+    {% if definition.kind.value == "DIENST" %}
+      {# Dienste werden nicht vom Bewohner abgehakt — der Hauswart prüft am Periodenende. #}
+      <span class="badge badge-neutral shrink-0">Hauswart prüft am {{ occurrence.period_end.strftime('%d.%m.') }}</span>
+    {% else %}
+      <form
+        method="post"
+        action="/tasks/{{ occurrence.id }}/done"
+        hx-post="/tasks/{{ occurrence.id }}/done"
+        hx-target="closest li"
+        hx-swap="outerHTML"
+        class="shrink-0"
       >
-        {{ icon("check", "h-4 w-4") }}
-        Erledigt
-      </button>
-    </form>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button
+          type="submit"
+          class="btn btn-accent btn-sm"
+        >
+          {{ icon("check", "h-4 w-4") }}
+          Erledigt
+        </button>
+      </form>
+    {% endif %}
   </div>
 </li>

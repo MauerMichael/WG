@@ -30,14 +30,16 @@ from app.models.user import User, UserRole  # noqa: E402
 OUTPUT_FILE = ROOT / "test_accounts.txt"
 
 # (name, email, roles, joined_days_ago)
+# Alle 365 Tage — gleicher Tenure-Faktor in der Fairness-Normalisierung,
+# sodass Assignments rein nach Score/Rotation verteilt werden (kein Bias zu
+# Lasten der laenger-tenured User).
 SEED_USERS: list[tuple[str, str, list[Role], int]] = [
     ("Michael Mauer", "michael.mauer@solveant.com", [Role.ADMIN, Role.HAUSWART, Role.HAUSBEWOHNER], 365),
-    ("Lena Hauser", "lena.hauser@wg.test", [Role.HAUSWART, Role.HAUSBEWOHNER], 200),
-    ("Jonas Becker", "jonas.becker@wg.test", [Role.HAUSBEWOHNER], 365),
-    ("Sophie Wagner", "sophie.wagner@wg.test", [Role.HAUSBEWOHNER], 180),
-    ("Felix Schaefer", "felix.schaefer@wg.test", [Role.HAUSBEWOHNER], 90),
-    ("Marie Hoffmann", "marie.hoffmann@wg.test", [Role.HAUSBEWOHNER], 30),
-    ("Tim Krueger", "tim.krueger@wg.test", [Role.HAUSBEWOHNER], 5),
+    ("Kylian", "kylian@wg.test", [Role.HAUSBEWOHNER], 365),
+    ("Maurice", "maurice@wg.test", [Role.HAUSBEWOHNER], 365),
+    ("Bishal", "bishal@wg.test", [Role.HAUSBEWOHNER], 365),
+    ("Alex", "alex@wg.test", [Role.HAUSBEWOHNER], 365),
+    ("Ngya", "ngya@wg.test", [Role.HAUSBEWOHNER], 365),
 ]
 
 

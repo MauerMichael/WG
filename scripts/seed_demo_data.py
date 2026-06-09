@@ -61,70 +61,130 @@ FUTURE_DAYS = 7  # kleiner Auslauf nach vorne fuer offene/testbare Aufgaben
 MON, TUE, WED, THU, FRI, SAT, SUN = range(7)
 
 
-# (title, kind, recurrence, anchor_weekday, difficulty, required, description)
+# (title, kind, recurrence, anchor_weekday, recurrence_interval_days,
+#  difficulty, required, description)
 DEFINITIONS: list[dict] = [
     {
-        "title": "Kueche putzen",
+        "title": "Geschirrspueler ein-/ausraeumen",
         "kind": TaskKind.AUFGABE,
-        "recurrence": Recurrence.WEEKLY,
-        "anchor_weekday": MON,
-        "difficulty": 3,
-        "required": 1,
-        "description": "Arbeitsflaechen abwischen, Herd reinigen, Boden wischen.",
-    },
-    {
-        "title": "Bad putzen",
-        "kind": TaskKind.AUFGABE,
-        "recurrence": Recurrence.WEEKLY,
-        "anchor_weekday": WED,
-        "difficulty": 4,
-        "required": 1,
-        "description": "Dusche, WC und Waschbecken gruendlich, Spiegel polieren.",
-    },
-    {
-        "title": "Muell & Altpapier rausbringen",
-        "kind": TaskKind.AUFGABE,
-        "recurrence": Recurrence.WEEKLY,
-        "anchor_weekday": FRI,
-        "difficulty": 2,
-        "required": 1,
-        "description": None,
-    },
-    {
-        "title": "Wohnzimmer & Flur staubsaugen",
-        "kind": TaskKind.AUFGABE,
-        "recurrence": Recurrence.WEEKLY,
-        "anchor_weekday": SAT,
-        "difficulty": 2,
-        "required": 1,
-        "description": None,
-    },
-    {
-        "title": "Spuelmaschine ausraeumen",
-        "kind": TaskKind.AUFGABE,
-        "recurrence": Recurrence.DAILY,
+        "recurrence": Recurrence.CUSTOM,
         "anchor_weekday": None,
-        "difficulty": 1,
+        "recurrence_interval_days": 2,
+        "difficulty": 2,
         "required": 1,
-        "description": "Taeglich nach dem Fruehstueck.",
+        "description": "Abends anstellen, am naechsten Tag bis 14 Uhr ausraeumen.",
     },
     {
-        "title": "Einkaufsdienst (Woche)",
+        "title": "Toilette 1 (Check)",
         "kind": TaskKind.DIENST,
         "recurrence": Recurrence.WEEKLY,
         "anchor_weekday": MON,
+        "recurrence_interval_days": None,
         "difficulty": 3,
         "required": 1,
-        "description": "Grundnahrungsmittel & Haushaltskram fuer die WG besorgen.",
+        "description": "Woechentlicher Check — wenn was zu meckern ist, direkt mit der Person sprechen.",
     },
     {
-        "title": "Grossputz Gemeinschaftskueche",
+        "title": "Toilette 2 (Check)",
+        "kind": TaskKind.DIENST,
+        "recurrence": Recurrence.WEEKLY,
+        "anchor_weekday": MON,
+        "recurrence_interval_days": None,
+        "difficulty": 3,
+        "required": 1,
+        "description": "Woechentlicher Check — wenn was zu meckern ist, direkt mit der Person sprechen.",
+    },
+    {
+        "title": "Toilette 3 (Check)",
+        "kind": TaskKind.DIENST,
+        "recurrence": Recurrence.WEEKLY,
+        "anchor_weekday": MON,
+        "recurrence_interval_days": None,
+        "difficulty": 3,
+        "required": 1,
+        "description": "Woechentlicher Check — wenn was zu meckern ist, direkt mit der Person sprechen.",
+    },
+    {
+        "title": "Toilette 4 (Check)",
+        "kind": TaskKind.DIENST,
+        "recurrence": Recurrence.WEEKLY,
+        "anchor_weekday": MON,
+        "recurrence_interval_days": None,
+        "difficulty": 3,
+        "required": 1,
+        "description": "Woechentlicher Check — wenn was zu meckern ist, direkt mit der Person sprechen.",
+    },
+    {
+        "title": "Kuechendienst",
+        "kind": TaskKind.DIENST,
+        "recurrence": Recurrence.WEEKLY,
+        "anchor_weekday": MON,
+        "recurrence_interval_days": None,
+        "difficulty": 7,
+        "required": 1,
+        "description": "Woechentlicher Check — bei Bedarf Hauswart anschreiben fuer Event-Aufgaben.",
+    },
+    {
+        "title": "Muelldienst",
+        "kind": TaskKind.DIENST,
+        "recurrence": Recurrence.BIWEEKLY,
+        "anchor_weekday": MON,
+        "recurrence_interval_days": None,
+        "difficulty": 5,
+        "required": 1,
+        "description": "Muelltonnen rausstellen + reinholen, Muell-Logistik fuer 2 Wochen.",
+    },
+    # Random Demo-Aufgaben fuer mehr Vielfalt in der Vorstellung.
+    {
+        "title": "Waeschekorb leeren",
+        "kind": TaskKind.AUFGABE,
+        "recurrence": Recurrence.WEEKLY,
+        "anchor_weekday": WED,
+        "recurrence_interval_days": None,
+        "difficulty": 1,
+        "required": 1,
+        "description": "Korb in die Waschkueche bringen — keine Wartepflicht.",
+    },
+    {
+        "title": "Kuehlschrank auswischen",
         "kind": TaskKind.AUFGABE,
         "recurrence": Recurrence.BIWEEKLY,
         "anchor_weekday": SUN,
-        "difficulty": 5,
+        "recurrence_interval_days": None,
+        "difficulty": 3,
+        "required": 1,
+        "description": "Alles raus, Faecher abwischen, Abgelaufenes wegwerfen.",
+    },
+]
+
+
+# Einmalige Aufgaben (recurrence=NONE) — bekommen genau EINE Occurrence in der Zukunft.
+# `due_in_days` = Offset zu heute fuer due_date / period_start.
+# `required` = 1 -> Einmalig (gelb), >1 -> Event (rosa).
+ONE_SHOT_DEFINITIONS: list[dict] = [
+    {
+        "title": "Fenster putzen",
+        "kind": TaskKind.AUFGABE,
+        "difficulty": 4,
+        "required": 1,
+        "description": "Innen + aussen, auch die Rahmen.",
+        "due_in_days": 5,
+    },
+    {
+        "title": "Fruehjahrsputz Bad",
+        "kind": TaskKind.AUFGABE,
+        "difficulty": 6,
         "required": 2,
-        "description": "Kuehlschrank ausraeumen, Schraenke wischen, alles entkalken.",
+        "description": "Dusche entkalken, Fugen reinigen, Spiegel polieren.",
+        "due_in_days": 8,
+    },
+    {
+        "title": "Bohrmaschine zurueckbringen",
+        "kind": TaskKind.AUFGABE,
+        "difficulty": 2,
+        "required": 1,
+        "description": "Geliehene Bohrmaschine an Nachbarn zurueck.",
+        "due_in_days": 3,
     },
 ]
 
@@ -194,6 +254,7 @@ def _create_definitions(creator: User) -> list[TaskDefinition]:
             difficulty_points=spec["difficulty"],
             recurrence=spec["recurrence"],
             anchor_weekday=spec["anchor_weekday"],
+            recurrence_interval_days=spec.get("recurrence_interval_days"),
             required_assignees=spec["required"],
             is_active=True,
             created_by_id=creator.id,
@@ -217,6 +278,9 @@ def _period_count(definition: TaskDefinition) -> int:
         return span // 14 + 2
     if rec == Recurrence.MONTHLY:
         return 3
+    if rec == Recurrence.CUSTOM:
+        interval = definition.recurrence_interval_days or 1
+        return span // max(interval, 1) + 2
     return 2
 
 
@@ -344,6 +408,103 @@ def _generate_and_animate(
     return counts
 
 
+def _create_one_shot_occurrences(
+    today: date, creator: User
+) -> tuple[list[TaskDefinition], int]:
+    """Legt fuer jede ONE_SHOT_DEFINITION eine Definition + eine einmalige
+    Occurrence in der Zukunft an (period_start = period_end = today + due_in_days).
+    Verteilt sie ueber assign_occurrence."""
+
+    defs: list[TaskDefinition] = []
+    assigned = 0
+    for spec in ONE_SHOT_DEFINITIONS:
+        d = TaskDefinition(
+            title=spec["title"],
+            description=spec["description"],
+            kind=spec["kind"],
+            difficulty_points=spec["difficulty"],
+            recurrence=Recurrence.NONE,
+            anchor_weekday=None,
+            recurrence_interval_days=None,
+            required_assignees=spec["required"],
+            is_active=True,
+            created_by_id=creator.id,
+        )
+        db.session.add(d)
+        db.session.flush()
+        defs.append(d)
+
+        due = today + timedelta(days=spec["due_in_days"])
+        occ = TaskOccurrence(
+            task_definition_id=d.id,
+            period_start=due,
+            period_end=due,
+            due_date=due,
+            status=TaskStatus.OPEN,
+        )
+        db.session.add(occ)
+        db.session.flush()
+        occ.task_definition = d
+        assignments = scheduling.assign_occurrence(db.session, occ)
+        assigned += len(assignments)
+
+    db.session.flush()
+    return defs, assigned
+
+
+def _rebalance_open_assignments(
+    definitions: list[TaskDefinition], today: date, users: list[User]
+) -> int:
+    """Stellt sicher, dass OPEN-Assignments (heute + Zukunft) gleichmaessig
+    verteilt sind. Greedy: solange max-min > 1, schiebe je eine Zuweisung von
+    der ueberlasteten zu der unterlasteten Person — falls Occurrence diese nicht
+    schon enthaelt."""
+
+    open_assigns: list[TaskAssignment] = []
+    for d in definitions:
+        for occ in d.occurrences:
+            if occ.period_end < today:
+                continue
+            for a in occ.assignments:
+                if a.status == AssignmentStatus.OPEN:
+                    open_assigns.append(a)
+
+    if not open_assigns or not users:
+        return 0
+
+    user_ids = [u.id for u in users]
+
+    def counts() -> dict:
+        c = {uid: 0 for uid in user_ids}
+        for a in open_assigns:
+            c[a.user_id] = c.get(a.user_id, 0) + 1
+        return c
+
+    swaps = 0
+    for _ in range(500):  # safety bound
+        c = counts()
+        max_uid = max(c, key=lambda k: c[k])
+        min_uid = min(c, key=lambda k: c[k])
+        if c[max_uid] - c[min_uid] <= 1:
+            break
+        moved = False
+        for a in open_assigns:
+            if a.user_id != max_uid:
+                continue
+            # Occurrence darf min_uid nicht schon enthalten (kein Duplikat).
+            if any(other.user_id == min_uid for other in a.occurrence.assignments):
+                continue
+            a.user_id = min_uid
+            moved = True
+            swaps += 1
+            break
+        if not moved:
+            break
+
+    db.session.flush()
+    return swaps
+
+
 def _ensure_assigned(definition: TaskDefinition, today: date, user: User) -> None:
     """Stellt sicher, dass ``user`` der laufenden/heutigen Occurrence zugewiesen ist.
 
@@ -380,18 +541,19 @@ def _ensure_assigned(definition: TaskDefinition, today: date, user: User) -> Non
 
 
 def _seed_absences(users: dict[str, User], today: date) -> int:
-    sophie = users.get("sophie.wagner@wg.test")
-    jonas = users.get("jonas.becker@wg.test")
-    felix = users.get("felix.schaefer@wg.test")
+    """Drei Abwesenheiten: eine laufend, eine vergangen, eine zukuenftig."""
+    alex = users.get("alex@wg.test")
+    kylian = users.get("kylian@wg.test")
+    ngya = users.get("ngya@wg.test")
     rows = []
-    if sophie:
-        rows.append(Absence(user_id=sophie.id, start_date=today - timedelta(days=2),
+    if alex:
+        rows.append(Absence(user_id=alex.id, start_date=today - timedelta(days=2),
                             end_date=today + timedelta(days=3), reason="Urlaub"))
-    if jonas:
-        rows.append(Absence(user_id=jonas.id, start_date=today - timedelta(days=10),
+    if kylian:
+        rows.append(Absence(user_id=kylian.id, start_date=today - timedelta(days=10),
                             end_date=today - timedelta(days=8), reason="Krank"))
-    if felix:
-        rows.append(Absence(user_id=felix.id, start_date=today + timedelta(days=5),
+    if ngya:
+        rows.append(Absence(user_id=ngya.id, start_date=today + timedelta(days=5),
                             end_date=today + timedelta(days=9), reason="Heimfahrt"))
     for r in rows:
         db.session.add(r)
@@ -449,18 +611,18 @@ def _seed_shopping(users: dict[str, User], today: date) -> int:
 def _seed_extras(users: dict[str, User], hauswarte: list[User], today: date) -> tuple[int, int]:
     """Sonderleistungen: 2 offen, 2 genehmigt (+HONOR-Karma), 1 abgelehnt."""
 
-    marie = users.get("marie.hoffmann@wg.test")
-    tim = users.get("tim.krueger@wg.test")
-    jonas = users.get("jonas.becker@wg.test")
-    felix = users.get("felix.schaefer@wg.test")
+    maurice = users.get("maurice@wg.test")
+    bishal = users.get("bishal@wg.test")
+    alex = users.get("alex@wg.test")
+    kylian = users.get("kylian@wg.test")
     reviewer = hauswarte[0] if hauswarte else None
 
     extras = 0
     honors = 0
 
     pending = [
-        (marie, "Keller entruempelt und Sperrmuell rausgebracht."),
-        (tim, "Eingangsbereich gefegt und Fussmatte ausgeklopft."),
+        (maurice, "Keller entruempelt und Sperrmuell rausgebracht."),
+        (bishal, "Eingangsbereich gefegt und Fussmatte ausgeklopft."),
     ]
     for user, desc in pending:
         if user is None:
@@ -472,8 +634,8 @@ def _seed_extras(users: dict[str, User], hauswarte: list[User], today: date) -> 
         extras += 1
 
     approved = [
-        (jonas, "Waschkueche komplett geputzt und Flusensieb gereinigt.", 10),
-        (felix, "Defekte Lampe im Flur repariert.", 6),
+        (alex, "Waschkueche komplett geputzt und Flusensieb gereinigt.", 10),
+        (kylian, "Defekte Lampe im Flur repariert.", 6),
     ]
     for user, desc, pts in approved:
         if user is None:
@@ -495,9 +657,9 @@ def _seed_extras(users: dict[str, User], hauswarte: list[User], today: date) -> 
         ))
         honors += 1
 
-    if tim is not None:
+    if bishal is not None:
         db.session.add(ExtraContribution(
-            user_id=tim.id,
+            user_id=bishal.id,
             description="Pflanzen auf dem Balkon gegossen (war eh mein Hobby).",
             status=ReviewStatus.REJECTED,
             review_note="Zaehlt nicht als WG-Sonderleistung.",
@@ -527,24 +689,48 @@ def main() -> int:
         definitions = _create_definitions(creator)
         counts = _generate_and_animate(definitions, today, hauswarte)
 
+        # Einmalige + Event-Aufgaben (NONE-Recurrence) zusaetzlich.
+        one_shots, one_shot_assigns = _create_one_shot_occurrences(today, creator)
+        counts["one_shots"] = len(one_shots)
+        counts["assignments"] += one_shot_assigns
+
         # Demo-Affordance: Michael sieht garantiert "Heute" + "Aktueller Dienst".
         if michael is not None:
             by_title = {d.title: d for d in definitions}
-            for title in ("Spuelmaschine ausraeumen", "Einkaufsdienst (Woche)"):
+            for title in ("Geschirrspueler ein-/ausraeumen", "Kuechendienst"):
                 d = by_title.get(title)
                 if d is not None:
                     _ensure_assigned(d, today, michael)
+
+        # Fairness-Rebalancer: OPEN-Assignments (heute + Zukunft) gleichmaessig
+        # auf alle 6 Bewohner verteilen.
+        all_defs = definitions + one_shots
+        residents = [u for u in users.values()
+                     if any(r.role == Role.HAUSBEWOHNER for r in u.roles)]
+        n_swaps = _rebalance_open_assignments(all_defs, today, residents)
 
         n_shopping = _seed_shopping(users, today)
         n_extras, n_honors = _seed_extras(users, hauswarte, today)
 
         db.session.commit()
 
+        # Verteilung pro User loggen (Demo-Sanity-Check).
+        per_user = {u.name: 0 for u in residents}
+        for d in all_defs:
+            for occ in d.occurrences:
+                if occ.period_end < today:
+                    continue
+                for a in occ.assignments:
+                    if a.status == AssignmentStatus.OPEN:
+                        name = next((u.name for u in residents if u.id == a.user_id), None)
+                        if name:
+                            per_user[name] = per_user.get(name, 0) + 1
+
         print("Demo-Daten erzeugt (Fenster: "
               f"{today - timedelta(days=PAST_DAYS)} .. {today + timedelta(days=FUTURE_DAYS)})")
         print(f"  Accounts:        {len(users)}")
-        print(f"  Aufgaben-Defs:   {len(definitions)}")
-        print(f"  Occurrences:     {counts['occurrences']}")
+        print(f"  Aufgaben-Defs:   {len(definitions)} wiederkehrend + {len(one_shots)} einmalig/event")
+        print(f"  Occurrences:     {counts['occurrences']} + {len(one_shots)} (einmalig)")
         print(f"  Zuweisungen:     {counts['assignments']}"
               f" (erledigt {counts['done']}, abgelehnt {counts['rejected']}, verpasst {counts['skipped']})")
         print(f"  Karma-Strafen:   {counts['penalties']}")
@@ -552,6 +738,10 @@ def main() -> int:
         print(f"  Abwesenheiten:   {n_absences}")
         print(f"  Einkaufs-Items:  {n_shopping}")
         print(f"  Sonderleistungen:{n_extras}")
+        print(f"  Rebalance-Swaps: {n_swaps}")
+        print(f"  OPEN/Person (heute+Zukunft):")
+        for name, n in sorted(per_user.items(), key=lambda kv: -kv[1]):
+            print(f"    {name:18}{n}")
     return 0
 
 

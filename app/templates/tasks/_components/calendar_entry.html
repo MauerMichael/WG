@@ -75,6 +75,9 @@
       <span class="badge badge-success">
         {{ icon("check", "h-3 w-3") }}Erledigt{% if done_by %} ({{ done_by|join(', ') }}){% endif %}
       </span>
+    {% elif ns.own and ns.own.status.value == "OPEN" and definition.kind.value == "DIENST" %}
+      {# Dienste: kein Bewohner-Abhaken. Hauswart prüft am Periodenende. #}
+      <span class="text-xs text-slate-500">Hauswart prüft am {{ occurrence.period_end.strftime('%d.%m.') }}</span>
     {% elif ns.own and ns.own.status.value == "OPEN" and today and today >= occurrence.period_start %}
       <form hx-post="{{ url_for('tasks.mark_done', occurrence_id=occurrence.id, view='week') }}"
             hx-target="#calendar-entry-{{ occurrence.id }}"

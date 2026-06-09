@@ -4,6 +4,19 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}WG{% endblock %}</title>
+
+  {# ---------- PWA: Manifest, Theme, Icons ---------- #}
+  <link rel="manifest" href="{{ url_for('pwa.manifest') }}">
+  <meta name="theme-color" content="#7c3aed">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="WG">
+  <link rel="icon" href="{{ url_for('static', filename='img/icons/favicon.ico') }}" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='img/icons/favicon-32.png') }}">
+  <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='img/icons/favicon-16.png') }}">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='img/icons/apple-touch-icon.png') }}">
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Varela+Round&family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
@@ -107,5 +120,14 @@
   <footer class="mx-auto max-w-5xl px-4 pb-28 pt-2 text-center text-xs text-slate-400 md:pb-8">
     WG-Organisation
   </footer>
+
+  {# ---------- PWA: Service-Worker registrieren ---------- #}
+  <script>
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", function () {
+        navigator.serviceWorker.register("{{ url_for('pwa.service_worker') }}").catch(function () {});
+      });
+    }
+  </script>
 </body>
 </html>

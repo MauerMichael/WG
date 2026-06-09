@@ -93,6 +93,7 @@ def create_app(config_name: str = "dev") -> Flask:
     from app.blueprints.dashboard import bp as dashboard_bp
     from app.blueprints.extras import bp as extras_bp
     from app.blueprints.hauswart import bp as hauswart_bp
+    from app.blueprints.pwa import bp as pwa_bp
     from app.blueprints.shopping import bp as shopping_bp
     from app.blueprints.tasks import bp as tasks_bp
 
@@ -104,6 +105,8 @@ def create_app(config_name: str = "dev") -> Flask:
     app.register_blueprint(admin_bp, url_prefix="/admin")
     app.register_blueprint(hauswart_bp, url_prefix="/hauswart")
     app.register_blueprint(extras_bp, url_prefix="/extras")
+    # PWA: Manifest, Service-Worker, Offline-Seite (Routen am Root: /sw.js etc.).
+    app.register_blueprint(pwa_bp)
 
     # Globale Auth-Guard: nur eingeloggte+approved User dürfen ins App-Innere.
     from app.blueprints.auth import register_auth_guard
