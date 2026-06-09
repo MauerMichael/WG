@@ -19,7 +19,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 from app.config import DevConfig, ProdConfig  # noqa: E402
-from app.extensions import db, login_manager, oauth  # noqa: E402
+from app.extensions import db, login_manager  # noqa: E402
 
 csrf = CSRFProtect()
 
@@ -45,7 +45,6 @@ def create_app(config_name: str = "dev") -> Flask:
 
     db.init_app(app)
     login_manager.init_app(app)
-    oauth.init_app(app)
     # CSRF-Schutz: Forms brauchen ein verstecktes csrf_token; HTMX-Requests
     # schicken den Token via X-CSRFToken-Header (siehe base.html). In Tests
     # via WTF_CSRF_ENABLED=False (conftest.py) deaktiviert.
@@ -56,14 +55,8 @@ def create_app(config_name: str = "dev") -> Flask:
     # auf HTTP und setzt secure-Cookies nicht. Im Dev (kein Proxy) harmless.
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
-    # Google OAuth Client registrieren (Authlib).
-    oauth.register(
-        name="google",
-        client_id=app.config.get("GOOGLE_CLIENT_ID"),
-        client_secret=app.config.get("GOOGLE_CLIENT_SECRET"),
-        server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
-        client_kwargs={"scope": "openid email profile"},
-    )
+    # Google-OAuth wurde komplett entfernt (Username+Passwort statt OAuth).
+    # ``google_sub`` bleibt als Spalte erhalten, ist aber ungenutzt.
 
     # Flask-Login konfigurieren.
     login_manager.login_view = "auth.login"

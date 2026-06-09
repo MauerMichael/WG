@@ -21,7 +21,7 @@
       {% endif %}
       <div class="space-y-1">
         <h1 class="text-2xl font-extrabold tracking-tight text-slate-900">{{ user.name }}</h1>
-        <p class="text-sm text-slate-500">{{ user.email }}</p>
+        <p class="text-sm text-slate-500">@{{ user.username }}{% if user.email %} · {{ user.email }}{% endif %}</p>
       </div>
     </header>
 

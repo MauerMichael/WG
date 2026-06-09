@@ -42,12 +42,16 @@ def app() -> Flask:
 
 
 def _make_user(name: str, *, roles: list[Role], status: UserStatus = UserStatus.APPROVED) -> User:
+    import uuid as _uuid
     now = datetime.now(timezone.utc)
+    suffix = _uuid.uuid4().hex[:6]
     user = User(
-        email=f"{name.lower()}@example.com",
+        username=f"{name.lower()}-{suffix}",
+        email=f"{name.lower()}-{suffix}@example.com",
         name=name,
         status=status,
         joined_at=now - timedelta(days=200),
+        must_change_password=False,
     )
     db.session.add(user)
     db.session.flush()

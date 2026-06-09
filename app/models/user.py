@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from flask_login import UserMixin
-from sqlalchemy import DateTime, Enum, ForeignKey, String, UniqueConstraint, func
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, UniqueConstraint, func, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -29,7 +29,23 @@ class User(UserMixin, db.Model):
         default=uuid.uuid4,
     )
     google_sub: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)
-    email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    # Username = Login-Identifier (klein, unique). Wird ueber den Admin-Anlage-Flow
+    # gesetzt; ueber die Migration fuer Bestands-User aus der E-Mail abgeleitet.
+    username: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    # E-Mail ist seit dem Wechsel auf Username+Passwort optional (nullable). Bleibt
+    # erhalten, falls spaeter Mail-Reminder o.ae. genutzt werden.
+    email: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)
+    # Werkzeug-pbkdf2-Hash, nullable: Dev-Login + Bestands-User koennen ohne Hash
+    # existieren, bis sie ueber Admin angelegt/zurueckgesetzt werden.
+    password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Erzwingt beim naechsten Login eine Passwort-Aenderung. Default True, damit
+    # Admin-angelegte Accounts immer beim ersten Login wechseln muessen.
+    must_change_password: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        server_default=text("true"),
+        default=True,
+    )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     avatar_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     status: Mapped[UserStatus] = mapped_column(

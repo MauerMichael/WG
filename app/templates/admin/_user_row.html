@@ -12,7 +12,7 @@
         <div class="truncate font-bold text-slate-900">
           {{ user.name }}{% if user.id == current_user.id %} <span class="text-xs font-normal text-slate-400">(du)</span>{% endif %}
         </div>
-        <div class="truncate text-xs text-slate-500">{{ user.email }}</div>
+        <div class="truncate text-xs text-slate-500">@{{ user.username }}</div>
       </div>
     </div>
     {% if user.status.value == 'PENDING' %}
@@ -61,6 +61,7 @@
           {{ action_form(url_for('admin.toggle_role', user_id=user.id), "Admin vergeben", "ghost", "", row_target, {"role": "ADMIN", "action": "add"}) }}
         {% endif %}
       {% endif %}
+      {{ action_form(url_for('admin.reset_password', user_id=user.id), "Passwort zurücksetzen", "ghost", "", row_target, {}, "Passwort von " ~ user.name ~ " wirklich zurücksetzen?") }}
       {{ action_form(url_for('admin.delete', user_id=user.id), "Entfernen", "danger", "trash", row_target, {}, "Wirklich entfernen?") }}
     {% else %}
       {{ action_form(url_for('admin.approve', user_id=user.id), "Wieder freischalten", "primary", "check", row_target) }}

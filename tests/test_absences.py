@@ -61,10 +61,13 @@ def client(app: Flask) -> FlaskClient:
 
 
 def _mk_user(name: str, *, roles: list[Role] | None = None) -> User:
+    suffix = uuid.uuid4().hex[:10]
     user = User(
-        email=f"{uuid.uuid4().hex[:10]}@test.local",
+        username=f"u-{suffix}",
+        email=f"{suffix}@test.local",
         name=name,
         status=UserStatus.APPROVED,
+        must_change_password=False,
     )
     db.session.add(user)
     db.session.flush()

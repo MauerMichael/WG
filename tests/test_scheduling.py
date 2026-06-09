@@ -73,8 +73,11 @@ def _make_user(
     status: UserStatus = UserStatus.APPROVED,
 ) -> User:
     now = datetime.now(timezone.utc)
+    import uuid as _uuid
+    suffix = _uuid.uuid4().hex[:6]
     user = User(
-        email=f"{name.lower().replace(' ', '.')}@example.com",
+        username=f"{name.lower().replace(' ', '.').replace('.', '-')}-{suffix}",
+        email=f"{name.lower().replace(' ', '.')}-{suffix}@example.com",
         name=name,
         status=status,
         joined_at=now - timedelta(days=joined_days_ago),
@@ -83,6 +86,7 @@ def _make_user(
             if last_assigned_days_ago is not None
             else None
         ),
+        must_change_password=False,
     )
     session.add(user)
     session.flush()

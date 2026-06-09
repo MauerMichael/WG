@@ -54,11 +54,14 @@ def client(app: Flask) -> FlaskClient:
 def _make_user(
     name: str, *, role: Role = Role.HAUSBEWOHNER, joined_days_ago: int = 200
 ) -> User:
+    suffix = uuid.uuid4().hex[:6]
     user = User(
-        email=f"{name.lower()}-{uuid.uuid4().hex[:6]}@example.com",
+        username=f"{name.lower().replace(' ', '')}-{suffix}",
+        email=f"{name.lower()}-{suffix}@example.com",
         name=name,
         status=UserStatus.APPROVED,
         joined_at=datetime.now(UTC) - timedelta(days=joined_days_ago),
+        must_change_password=False,
     )
     db.session.add(user)
     db.session.flush()

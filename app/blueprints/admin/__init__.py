@@ -7,6 +7,8 @@ für Inline-Updates; ohne HTMX wird auf die volle Listen-Seite zurückgeleitet.
 
 from __future__ import annotations
 
+import re
+import secrets
 import uuid
 from datetime import datetime, timezone
 
@@ -20,7 +22,8 @@ from flask import (
     url_for,
 )
 from flask_login import current_user, login_required
-from sqlalchemy import case
+from sqlalchemy import case, func
+from werkzeug.security import generate_password_hash
 
 from app.blueprints.auth import (
     ensure_joined_at,
@@ -32,8 +35,11 @@ from app.blueprints.auth import (
 from app.domain.enums import Role, UserStatus
 from app.extensions import db
 from app.models.audit import AuditLog
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.services import scheduling
+
+# a-z, 0-9, Bindestrich, Underscore — bewusst eng, damit Usernames URL-safe sind.
+_USERNAME_RE = re.compile(r"^[a-z0-9_-]{2,64}$")
 
 bp = Blueprint("admin", __name__, template_folder="../../templates/admin")
 
@@ -290,6 +296,156 @@ def delete(user_id: str):
             msg += f" {reassigned} offene Aufgabe(n) neu verteilt."
         flash(msg, "success")
     return _row_response(user)
+
+
+# ---------------------------------------------------------------------------
+# User-Anlage + Passwort-Reset (Username/Passwort statt Google-OAuth)
+# ---------------------------------------------------------------------------
+
+
+def _generate_temp_password() -> str:
+    """Erzeugt ein einmaliges temporaeres Passwort (URL-safe, ~11 Zeichen).
+
+    Wird genau einmal in der Success-Karte angezeigt; muss vom Empfaenger
+    sofort weitergeleitet werden, da kein Speicher.
+    """
+    return secrets.token_urlsafe(8)
+
+
+def _username_taken(username: str) -> bool:
+    return (
+        db.session.query(User)
+        .filter(func.lower(User.username) == username.lower())
+        .first()
+        is not None
+    )
+
+
+@bp.route("/users/new", methods=["GET"])
+@login_required
+def new_user_form():
+    """Formular zum Anlegen eines neuen Accounts (Username + temp Passwort)."""
+    require_admin_or_hauswart()
+    return render_template(
+        "admin/new_user.html",
+        Role=Role,
+        can_grant_admin=user_has_role(current_user, Role.ADMIN),
+        form={},
+        errors=[],
+        created=None,
+    )
+
+
+@bp.route("/users/new", methods=["POST"])
+@login_required
+def new_user_create():
+    """Legt einen Account mit temporaerem Passwort an."""
+    require_admin_or_hauswart()
+
+    name = (request.form.get("name") or "").strip()
+    username = (request.form.get("username") or "").strip().lower()
+    raw_roles = request.form.getlist("roles") or []
+    can_grant_admin = user_has_role(current_user, Role.ADMIN)
+
+    errors: list[str] = []
+    if not name:
+        errors.append("Name darf nicht leer sein.")
+    if not username:
+        errors.append("Benutzername darf nicht leer sein.")
+    elif not _USERNAME_RE.match(username):
+        errors.append(
+            "Benutzername muss 2–64 Zeichen aus a–z, 0–9, _ und - enthalten."
+        )
+    elif _username_taken(username):
+        errors.append("Benutzername ist bereits vergeben.")
+
+    # Rollen validieren: HAUSBEWOHNER wird immer gesetzt (Standard-Mitglied).
+    roles_to_grant: set[Role] = {Role.HAUSBEWOHNER}
+    for r in raw_roles:
+        if r == Role.HAUSWART.name:
+            roles_to_grant.add(Role.HAUSWART)
+        elif r == Role.ADMIN.name:
+            if not can_grant_admin:
+                errors.append("Nur Admins koennen die Admin-Rolle vergeben.")
+            else:
+                roles_to_grant.add(Role.ADMIN)
+        elif r == Role.HAUSBEWOHNER.name:
+            roles_to_grant.add(Role.HAUSBEWOHNER)
+
+    if errors:
+        return render_template(
+            "admin/new_user.html",
+            Role=Role,
+            can_grant_admin=can_grant_admin,
+            form={"name": name, "username": username, "roles": raw_roles},
+            errors=errors,
+            created=None,
+        ), 400
+
+    temp_password = _generate_temp_password()
+    now = datetime.now(timezone.utc)
+    user = User(
+        username=username,
+        name=name,
+        status=UserStatus.APPROVED,
+        joined_at=now,
+        password_hash=generate_password_hash(temp_password),
+        must_change_password=True,
+    )
+    db.session.add(user)
+    db.session.flush()
+    for role in roles_to_grant:
+        db.session.add(UserRole(user_id=user.id, role=role))
+
+    _audit(
+        "user.create",
+        user,
+        {
+            "username": username,
+            "name": name,
+            "roles": sorted(r.name for r in roles_to_grant),
+        },
+    )
+    db.session.commit()
+
+    return render_template(
+        "admin/new_user.html",
+        Role=Role,
+        can_grant_admin=can_grant_admin,
+        form={},
+        errors=[],
+        created={
+            "user": user,
+            "username": username,
+            "temp_password": temp_password,
+        },
+    )
+
+
+@bp.route("/users/<user_id>/reset-password", methods=["POST"])
+@login_required
+def reset_password(user_id: str):
+    """Setzt das Passwort des Users auf ein neues temporaeres zurueck."""
+    require_admin_or_hauswart()
+    user = _get_user_or_404(user_id)
+
+    temp_password = _generate_temp_password()
+    user.password_hash = generate_password_hash(temp_password)
+    user.must_change_password = True
+    _audit("user.reset_password", user, {"username": user.username})
+    db.session.commit()
+
+    if _is_htmx():
+        return render_template(
+            "admin/_password_reset_card.html",
+            user=user,
+            temp_password=temp_password,
+        )
+    flash(
+        f"Neues temporaeres Passwort fuer {user.name}: {temp_password}",
+        "success",
+    )
+    return redirect(url_for("admin.users"))
 
 
 # Use `datetime` to silence unused-import warning when ensure_joined_at is patched.

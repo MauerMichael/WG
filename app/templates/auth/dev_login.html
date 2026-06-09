@@ -23,7 +23,7 @@
       <li class="flex items-center justify-between gap-3 rounded-2xl bg-brand-50/60 p-4">
         <div class="min-w-0">
           <p class="truncate text-sm font-extrabold text-slate-900">{{ user.name }}</p>
-          <p class="truncate text-xs text-slate-500">{{ user.email }}</p>
+          <p class="truncate text-xs text-slate-500">@{{ user.username }}</p>
           <p class="mt-1.5 flex flex-wrap items-center gap-1">
             {% for r in user.roles %}
               {{ badge(r.role.value, "info") }}

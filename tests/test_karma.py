@@ -67,8 +67,11 @@ def _make_user(
     role: Role = Role.HAUSBEWOHNER,
 ) -> User:
     now = datetime.now(UTC)
+    import uuid as _uuid
+    suffix = _uuid.uuid4().hex[:6]
     user = User(
-        email=f"{name.lower()}@example.com",
+        username=f"{name.lower().replace(' ', '')}-{suffix}",
+        email=f"{name.lower()}-{suffix}@example.com",
         name=name,
         status=UserStatus.APPROVED,
         joined_at=now - timedelta(days=joined_days_ago),
@@ -77,6 +80,7 @@ def _make_user(
             if last_assigned_days_ago is not None
             else None
         ),
+        must_change_password=False,
     )
     session.add(user)
     session.flush()

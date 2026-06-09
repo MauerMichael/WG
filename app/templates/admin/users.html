@@ -6,7 +6,12 @@
 {% block content %}
 <section class="space-y-6">
   {% include "components/_verwaltung_subnav.html" %}
-  {{ page_header("Nutzer", "Verwaltung") }}
+  {% set new_user_action %}
+    <a href="{{ url_for('admin.new_user_form') }}" class="btn btn-primary btn-sm">
+      + Nutzer anlegen
+    </a>
+  {% endset %}
+  {{ page_header("Nutzer", "Verwaltung", new_user_action) }}
 
   {# Karten-Liste statt Tabelle: kein horizontales Scrollen auf dem Handy. #}
   {% if users %}

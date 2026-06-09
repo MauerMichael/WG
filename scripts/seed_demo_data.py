@@ -230,10 +230,13 @@ def _reset_demo_data() -> None:
 def _ensure_users() -> dict[str, User]:
     """Stellt die Standard-Accounts sicher und liefert sie als email->User-Map."""
 
-    for name, email, roles, joined_days_ago in SEED_USERS:
-        _upsert_user(name, email, roles, joined_days_ago)
+    for name, username, email, roles, joined_days_ago in SEED_USERS:
+        _upsert_user(name, username, email, roles, joined_days_ago)
     db.session.flush()
-    return {u.email: u for u in db.session.query(User).all()}
+    # Map per E-Mail bleibt fuer die restlichen Helper-Funktionen unveraendert,
+    # damit die uebrigen Lookup-Stellen weiter funktionieren. User ohne E-Mail
+    # werden bewusst uebersprungen (alle Seed-Accounts haben eine).
+    return {u.email: u for u in db.session.query(User).all() if u.email}
 
 
 def _hauswarte(users: dict[str, User]) -> list[User]:
@@ -679,7 +682,7 @@ def main() -> int:
         users = _ensure_users()
         _reset_demo_data()
         # Accounts nach dem Reset frisch laden (Map-Referenzen bleiben gueltig).
-        users = {u.email: u for u in db.session.query(User).all()}
+        users = {u.email: u for u in db.session.query(User).all() if u.email}
         hauswarte = _hauswarte(users)
         michael = users.get("michael.mauer@solveant.com")
         creator = michael or next(iter(users.values()))
