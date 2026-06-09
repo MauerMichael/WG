@@ -16,9 +16,10 @@ WORKDIR /app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Tailwind-Standalone-Binary holen und ausfuehrbar machen.
+# Tailwind-Standalone-Binary holen (v3, NICHT latest — v4 ignoriert
+# `tailwind.config.js` und bricht bei unseren Custom-Tokens wie `bg-surface`).
 RUN curl -fsSL \
-        https://github.com/tailwindlabs/tailwindcss/releases/latest/download/tailwindcss-linux-x64 \
+        https://github.com/tailwindlabs/tailwindcss/releases/download/v3.4.17/tailwindcss-linux-x64 \
         -o /usr/local/bin/tailwindcss \
     && chmod +x /usr/local/bin/tailwindcss
 
