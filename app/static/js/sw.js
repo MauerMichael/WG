@@ -15,12 +15,12 @@
  *     dem Cache, Update läuft im Hintergrund (output.css ist nicht gehasht).
  */
 
-// "wg-static-v2" ist nur ein Platzhalter: die /sw.js-Route (app/blueprints/pwa)
+// "wg-static-v1" ist nur ein Platzhalter: die /sw.js-Route (app/blueprints/pwa)
 // ersetzt ihn beim Ausliefern durch einen aus dem Asset-Inhalt abgeleiteten
 // Token, damit ein Deploy mit geänderter output.css den Cache sauber erneuert.
-// Bumpen wenn sich die SW-Strategie geaendert hat — alte Caches werden im
-// activate-Hook unten ausgeraeumt.
-const CACHE = "wg-static-v2";
+// Das Aendern dieser SW-Logik selbst ist im Token bereits drin (js/sw.js ist
+// Teil des Hashes), also keinen v2/v3-Bump noetig.
+const CACHE = "wg-static-v1";
 const OFFLINE_URL = "/offline";
 // Wie lange (ms) maximal aufs Netz warten, bevor wir bei einer Navigation
 // auf Cache/Offline-Fallback ausweichen. Auf langsamen Mobile-Verbindungen

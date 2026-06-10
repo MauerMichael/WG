@@ -123,4 +123,17 @@ def create_app(config_name: str = "dev") -> Flask:
     def _inject_today() -> dict:
         return {"today": date.today()}
 
+    # `asset_version` global in allen Templates: kurzer Content-Hash ueber die
+    # cache-relevanten Static-Assets. Wird in base.html als ?v=<hash> an
+    # output.css/htmx.min.js gehaengt -> aenderung des Build-Inhalts bricht den
+    # Browser-Cache automatisch. Nutzt denselben Token wie der Service-Worker
+    # (app.blueprints.pwa._cache_token), sodass beide synchron updaten.
+    @app.context_processor
+    def _inject_asset_version() -> dict:
+        try:
+            from app.blueprints.pwa import _cache_token
+            return {"asset_version": _cache_token()}
+        except Exception:
+            return {"asset_version": ""}
+
     return app

@@ -40,8 +40,13 @@ ENV PYTHONUNBUFFERED=1 \
 
 EXPOSE 8000
 
-# gunicorn: 3 Worker reicht fuer eine WG. Logs auf stdout/stderr fuer
-# `docker logs` und systemd-journal.
-CMD ["gunicorn", "-w", "3", "-b", "0.0.0.0:8000", \
+# gunicorn: 3 Worker × 4 Threads = bis zu 12 parallele Requests. Statt nur
+# sync-Workern (jeder Worker blockt 1 Request lang) nutzen wir gthread —
+# pro Request liefen Static-Files und DB-IO sonst alle hintereinander
+# durch dieselben 3 Worker und Mobile-Browser sahen lange Timeouts.
+# --timeout 60s gibt langsamen Renders + DB-Queries genug Zeit.
+# Logs auf stdout/stderr fuer `docker logs`.
+CMD ["gunicorn", "-w", "3", "-k", "gthread", "--threads", "4", \
+     "--timeout", "60", "-b", "0.0.0.0:8000", \
      "--access-logfile", "-", "--error-logfile", "-", \
      "wsgi:app"]

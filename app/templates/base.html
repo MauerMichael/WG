@@ -20,8 +20,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Varela+Round&family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/output.css') }}">
-  <script src="{{ url_for('static', filename='js/htmx.min.js') }}" defer></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/output.css') }}?v={{ asset_version }}">
+  <script src="{{ url_for('static', filename='js/htmx.min.js') }}?v={{ asset_version }}" defer></script>
   {# CSRF-Token fuer HTMX-Requests (Form-POSTs haben ihn als hidden input). #}
   <meta name="csrf-token" content="{{ csrf_token() }}">
   <script>
@@ -121,11 +121,31 @@
     WG-Organisation
   </footer>
 
-  {# ---------- PWA: Service-Worker registrieren ---------- #}
+  {# ---------- PWA: Service-Worker + Auto-Update ---------- #}
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", function () {
-        navigator.serviceWorker.register("{{ url_for('pwa.service_worker') }}").catch(function () {});
+        navigator.serviceWorker.register("{{ url_for('pwa.service_worker') }}").then(function (reg) {
+          // Sobald ein neuer SW installiert ist (und ein aktiver SW existiert),
+          // sofort übernehmen lassen — kein "Aktualisieren"-Klick noetig.
+          reg.addEventListener("updatefound", function () {
+            var sw = reg.installing;
+            if (!sw) return;
+            sw.addEventListener("statechange", function () {
+              if (sw.state === "installed" && navigator.serviceWorker.controller) {
+                sw.postMessage("SKIP_WAITING");
+              }
+            });
+          });
+          // Wenn der neue SW die Kontrolle uebernimmt -> einmal neu laden,
+          // damit alle Tabs mit der neuen Version aufmachen. Nur einmal.
+          var reloaded = false;
+          navigator.serviceWorker.addEventListener("controllerchange", function () {
+            if (reloaded) return;
+            reloaded = true;
+            window.location.reload();
+          });
+        }).catch(function () {});
       });
     }
   </script>
