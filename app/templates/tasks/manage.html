@@ -47,12 +47,24 @@
               </div>
               {{ definition_meta(d, recurrence_labels) }}
             </div>
-            <form method="post" action="{{ url_for('tasks.activate', definition_id=d.id) }}">
+            <div class="flex flex-wrap items-center gap-1.5">
+              <a href="{{ url_for('tasks.edit', definition_id=d.id) }}" class="btn btn-ghost btn-sm">
+                {{ icon("pencil", "h-4 w-4") }}<span>Bearbeiten</span>
+              </a>
+              <form method="post" action="{{ url_for('tasks.activate', definition_id=d.id) }}">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-              <button type="submit" class="btn btn-primary btn-sm">
-                {{ icon("check", "h-4 w-4") }}<span>Aktivieren</span>
-              </button>
-            </form>
+                <button type="submit" class="btn btn-primary btn-sm">
+                  {{ icon("check", "h-4 w-4") }}<span>Aktivieren</span>
+                </button>
+              </form>
+              <form method="post" action="{{ url_for('tasks.delete', definition_id=d.id) }}"
+                    onsubmit="return confirm('Aufgabe und alle ihre Termine endgültig löschen?');">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-danger btn-sm">
+                  {{ icon("trash", "h-4 w-4") }}<span>Löschen</span>
+                </button>
+              </form>
+            </div>
           </div>
         {% endfor %}
       </div>
@@ -77,13 +89,25 @@
               </div>
               {{ definition_meta(d, recurrence_labels) }}
             </div>
-            <form method="post" action="{{ url_for('tasks.deactivate', definition_id=d.id) }}"
-                  onsubmit="return confirm('Aufgabe deaktivieren? Es werden keine neuen Termine mehr erzeugt.');">
+            <div class="flex flex-wrap items-center gap-1.5">
+              <a href="{{ url_for('tasks.edit', definition_id=d.id) }}" class="btn btn-ghost btn-sm">
+                {{ icon("pencil", "h-4 w-4") }}<span>Bearbeiten</span>
+              </a>
+              <form method="post" action="{{ url_for('tasks.deactivate', definition_id=d.id) }}"
+                    onsubmit="return confirm('Aufgabe deaktivieren? Es werden keine neuen Termine mehr erzeugt.');">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-              <button type="submit" class="btn btn-ghost btn-sm">
-                {{ icon("x", "h-4 w-4") }}<span>Deaktivieren</span>
-              </button>
-            </form>
+                <button type="submit" class="btn btn-ghost btn-sm">
+                  {{ icon("x", "h-4 w-4") }}<span>Deaktivieren</span>
+                </button>
+              </form>
+              <form method="post" action="{{ url_for('tasks.delete', definition_id=d.id) }}"
+                    onsubmit="return confirm('Aufgabe und alle ihre Termine endgültig löschen?');">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-danger btn-sm">
+                  {{ icon("trash", "h-4 w-4") }}<span>Löschen</span>
+                </button>
+              </form>
+            </div>
           </div>
         {% endfor %}
       </div>

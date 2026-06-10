@@ -853,6 +853,230 @@ def deactivate(definition_id: str):
     return redirect(request.referrer or url_for("tasks.manage"))
 
 
+@bp.route("/<definition_id>/edit", methods=["GET"])
+@_require_hauswart
+def edit(definition_id: str):
+    """Bearbeitungs-Formular: vorbefüllt mit den aktuellen Werten."""
+    def_uuid = _parse_uuid(definition_id)
+    definition = db.session.get(TaskDefinition, def_uuid)
+    if definition is None:
+        abort(404)
+
+    eligible_ids = [str(e.user_id) for e in (definition.eligible_users or [])]
+    return render_template(
+        "tasks/form.html",
+        recurrence_labels=RECURRENCE_LABELS,
+        kind_labels=KIND_LABELS,
+        weekday_labels=WEEKDAY_LABELS,
+        hausbewohner=_approved_hausbewohner(),
+        form={
+            "title": definition.title,
+            "description": definition.description or "",
+            "kind": definition.kind.value,
+            "difficulty_points": definition.difficulty_points,
+            "recurrence": definition.recurrence.value,
+            "recurrence_interval_days": definition.recurrence_interval_days or "",
+            "anchor_weekday": str(definition.anchor_weekday) if definition.anchor_weekday is not None else "0",
+            "anchor_day_of_month": str(definition.anchor_day_of_month) if definition.anchor_day_of_month is not None else "1",
+            "required_assignees": definition.required_assignees,
+            "due_date": (
+                definition.occurrences[0].due_date.strftime("%Y-%m-%d")
+                if (definition.recurrence == Recurrence.NONE and definition.occurrences)
+                else ""
+            ),
+            "eligible_user_ids": eligible_ids,
+            "save_as_draft": False,
+        },
+        errors={},
+        min_points=MIN_DIFFICULTY_POINTS,
+        max_points=MAX_DIFFICULTY_POINTS,
+        form_action=url_for("tasks.update", definition_id=str(definition.id)),
+        page_title=f"„{definition.title}" + "“ bearbeiten",
+        page_subtitle="Änderungen wirken sich auf alle künftigen Perioden aus.",
+        sub_nav_active="manage",
+    )
+
+
+@bp.route("/<definition_id>/edit", methods=["POST"])
+@_require_hauswart
+def update(definition_id: str):
+    """Aktualisiert eine TaskDefinition.
+
+    Spielregel: bei Änderung der Wiederholungs-Logik (Recurrence-Art, Anker,
+    Custom-Intervall, Required-Assignees) werden ZUKÜNFTIGE OPEN-Occurrences
+    weggeworfen und mit den neuen Werten neu generiert. Vergangenheit + bereits
+    erledigte Termine bleiben unangetastet.
+    """
+    def_uuid = _parse_uuid(definition_id)
+    definition = db.session.get(TaskDefinition, def_uuid)
+    if definition is None:
+        abort(404)
+
+    form = request.form
+    title = (form.get("title") or "").strip()
+    description = (form.get("description") or "").strip() or None
+    kind_raw = form.get("kind") or TaskKind.AUFGABE.value
+    try:
+        kind = TaskKind(kind_raw)
+    except ValueError:
+        kind = TaskKind.AUFGABE
+    difficulty = _parse_int(form.get("difficulty_points"), DEFAULT_DIFFICULTY_POINTS)
+    recurrence_raw = form.get("recurrence") or Recurrence.NONE.value
+    interval = _parse_int(form.get("recurrence_interval_days"))
+    anchor_weekday_raw = form.get("anchor_weekday")
+    anchor_dom_raw = form.get("anchor_day_of_month")
+    required = _parse_int(form.get("required_assignees"), 1) or 1
+    eligible_ids = form.getlist("eligible_user_ids")
+
+    errors: dict[str, str] = {}
+    if not title:
+        errors["title"] = "Titel ist erforderlich."
+    if difficulty is None or difficulty < MIN_DIFFICULTY_POINTS or difficulty > MAX_DIFFICULTY_POINTS:
+        errors["difficulty_points"] = (
+            f"Punkte müssen zwischen {MIN_DIFFICULTY_POINTS} und {MAX_DIFFICULTY_POINTS} liegen."
+        )
+    try:
+        recurrence = Recurrence(recurrence_raw)
+    except ValueError:
+        recurrence = Recurrence.NONE
+        errors["recurrence"] = "Unbekannte Wiederholung."
+    if required < 1:
+        errors["required_assignees"] = "Mindestens 1 Bewohner."
+
+    anchor_weekday: int | None = None
+    anchor_day_of_month: int | None = None
+    if recurrence in (Recurrence.WEEKLY, Recurrence.BIWEEKLY):
+        anchor_weekday = _parse_int(anchor_weekday_raw, 0)
+        if anchor_weekday is None or anchor_weekday < 0 or anchor_weekday > 6:
+            errors["anchor_weekday"] = "Wochentag muss zwischen Montag und Sonntag liegen."
+    elif recurrence == Recurrence.MONTHLY:
+        anchor_day_of_month = _parse_int(anchor_dom_raw, 1)
+        if anchor_day_of_month is None or anchor_day_of_month < 1 or anchor_day_of_month > 28:
+            errors["anchor_day_of_month"] = "Tag im Monat muss zwischen 1 und 28 liegen."
+    elif recurrence == Recurrence.CUSTOM:
+        if interval is None or interval < 1:
+            errors["recurrence_interval_days"] = "Eigenes Intervall muss mindestens 1 Tag sein."
+
+    # NONE (einmalig) macht beim Edit keinen Sinn — wir blockieren das Wechseln
+    # zwischen NONE und wiederkehrend bewusst, weil die Occurrence-Logik dort
+    # ganz anders ist.
+    if recurrence != definition.recurrence and (
+        recurrence == Recurrence.NONE or definition.recurrence == Recurrence.NONE
+    ):
+        errors["recurrence"] = (
+            "Wechsel zwischen einmaliger und wiederkehrender Aufgabe nicht "
+            "möglich — bitte neue Aufgabe anlegen."
+        )
+
+    if errors:
+        return (
+            render_template(
+                "tasks/form.html",
+                recurrence_labels=RECURRENCE_LABELS,
+                kind_labels=KIND_LABELS,
+                weekday_labels=WEEKDAY_LABELS,
+                hausbewohner=_approved_hausbewohner(),
+                form={
+                    "title": title,
+                    "description": description or "",
+                    "kind": kind.value,
+                    "difficulty_points": difficulty or DEFAULT_DIFFICULTY_POINTS,
+                    "recurrence": recurrence_raw,
+                    "recurrence_interval_days": form.get("recurrence_interval_days") or "",
+                    "anchor_weekday": anchor_weekday_raw if anchor_weekday_raw not in (None, "") else "0",
+                    "anchor_day_of_month": anchor_dom_raw if anchor_dom_raw not in (None, "") else "1",
+                    "required_assignees": required,
+                    "due_date": "",
+                    "eligible_user_ids": eligible_ids,
+                    "save_as_draft": False,
+                },
+                errors=errors,
+                min_points=MIN_DIFFICULTY_POINTS,
+                max_points=MAX_DIFFICULTY_POINTS,
+                form_action=url_for("tasks.update", definition_id=str(definition.id)),
+                page_title=f"„{definition.title}" + "“ bearbeiten",
+                page_subtitle="Änderungen wirken sich auf alle künftigen Perioden aus.",
+                sub_nav_active="manage",
+            ),
+            400,
+        )
+
+    # Schauen ob sich die Verteilungs-Logik geändert hat — dann regenerieren.
+    schedule_changed = (
+        recurrence != definition.recurrence
+        or anchor_weekday != definition.anchor_weekday
+        or anchor_day_of_month != definition.anchor_day_of_month
+        or (interval if recurrence == Recurrence.CUSTOM else None)
+            != definition.recurrence_interval_days
+        or required != definition.required_assignees
+    )
+
+    # Felder aktualisieren.
+    definition.title = title
+    definition.description = description
+    definition.kind = kind
+    definition.difficulty_points = difficulty
+    definition.recurrence = recurrence
+    definition.recurrence_interval_days = (
+        interval if recurrence == Recurrence.CUSTOM else None
+    )
+    definition.anchor_weekday = anchor_weekday
+    definition.anchor_day_of_month = anchor_day_of_month
+    definition.required_assignees = required
+
+    # Eligibility-Liste neu setzen.
+    db.session.query(TaskDefinitionEligibleUser).filter_by(
+        task_definition_id=definition.id
+    ).delete()
+    for raw_id in eligible_ids:
+        try:
+            uid = uuid.UUID(raw_id)
+        except (ValueError, TypeError):
+            continue
+        db.session.add(
+            TaskDefinitionEligibleUser(task_definition_id=definition.id, user_id=uid)
+        )
+
+    # Schedule-Änderung -> alle OPEN-Occurrences in der Zukunft wegwerfen,
+    # dann neu generieren. Vergangene + DONE bleiben in Ruhe.
+    if schedule_changed and recurrence != Recurrence.NONE:
+        today = date.today()
+        future_open = [
+            occ for occ in definition.occurrences
+            if occ.status == TaskStatus.OPEN and occ.period_start > today
+        ]
+        for occ in future_open:
+            db.session.delete(occ)
+        db.session.flush()
+        scheduling.generate_occurrences(db.session, lookahead_periods=2)
+
+    db.session.commit()
+    flash("Aufgabe aktualisiert.", "success")
+    return redirect(url_for("tasks.detail", definition_id=str(definition.id)))
+
+
+@bp.route("/<definition_id>/delete", methods=["POST"])
+@_require_hauswart
+def delete(definition_id: str):
+    """Hard-Delete einer Aufgabe inkl. ihrer Occurrences/Assignments.
+
+    KarmaEvents bleiben erhalten (occurrence_id wird per ON DELETE SET NULL
+    auf NULL gesetzt), damit der Score nicht plötzlich umspringt.
+    """
+    def_uuid = _parse_uuid(definition_id)
+    definition = db.session.get(TaskDefinition, def_uuid)
+    if definition is None:
+        abort(404)
+
+    title = definition.title
+    # Cascade in den Modellen entfernt Occurrences -> Assignments -> Handover-Offers
+    # zuverlässig in der richtigen Reihenfolge.
+    db.session.delete(definition)
+    db.session.commit()
+    flash(f"„{title}“ gelöscht.", "info")
+    return redirect(url_for("tasks.manage"))
+
+
 @bp.route("/verwalten", methods=["GET"])
 @_require_hauswart
 def manage() -> str:

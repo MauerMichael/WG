@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% from "components/icons.html" import icon %}
 {% from "components/ui.html" import page_header, sub_nav %}
-{% block title %}Neue Aufgabe — WG{% endblock %}
+{% block title %}{{ page_title|default("Neue Aufgabe") }} — WG{% endblock %}
 
 {% block content %}
 <section class="space-y-6">
@@ -10,8 +10,11 @@
     (url_for('tasks.view_all'), 'all', 'WG'),
     (url_for('tasks.new'), 'new', 'Neu'),
     (url_for('tasks.manage'), 'manage', 'Verwalten'),
-  ], 'new') }}
-  {{ page_header("Neue Aufgabe", "Lege eine wiederkehrende oder einmalige Aufgabe an.") }}
+  ], sub_nav_active|default('new')) }}
+  {{ page_header(
+        page_title|default("Neue Aufgabe"),
+        page_subtitle|default("Lege eine wiederkehrende oder einmalige Aufgabe an.")
+  ) }}
 
   {% if errors %}
     <div class="flex items-center gap-2 rounded-2xl bg-rose-50 p-4 text-sm font-bold text-rose-900 ring-1 ring-inset ring-rose-200">
@@ -20,7 +23,7 @@
     </div>
   {% endif %}
 
-  <form method="post" action="{{ url_for('tasks.create') }}" class="card space-y-5">
+  <form method="post" action="{{ form_action|default(url_for('tasks.create')) }}" class="card space-y-5">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="field">
       <label class="label">Titel</label>

@@ -441,6 +441,107 @@ def test_deactivate_sets_flag(app):
     assert definition.is_active is False
 
 
+def test_edit_form_prefills_current_values(app):
+    hauswart = _make_user("Hannes", role=Role.HAUSWART)
+    client = app.test_client()
+    _login(client, hauswart)
+
+    client.post(
+        "/tasks/",
+        data={
+            "title": "Mülldienst",
+            "kind": "DIENST",
+            "difficulty_points": "3",
+            "recurrence": "WEEKLY",
+            "anchor_weekday": "1",
+            "required_assignees": "1",
+        },
+    )
+    definition = db.session.query(TaskDefinition).one()
+    resp = client.get(f"/tasks/{definition.id}/edit")
+    assert resp.status_code == 200
+    assert b"M\xc3\xbclldienst" in resp.data
+    assert b"bearbeiten" in resp.data
+
+
+def test_update_changes_title_and_recurrence(app):
+    hauswart = _make_user("Hannes", role=Role.HAUSWART)
+    _make_user("Bewohner", role=Role.HAUSBEWOHNER)
+    client = app.test_client()
+    _login(client, hauswart)
+
+    client.post(
+        "/tasks/",
+        data={
+            "title": "Alter Titel",
+            "difficulty_points": "2",
+            "recurrence": "WEEKLY",
+            "anchor_weekday": "1",
+            "required_assignees": "1",
+        },
+    )
+    definition = db.session.query(TaskDefinition).one()
+
+    resp = client.post(
+        f"/tasks/{definition.id}/edit",
+        data={
+            "title": "Neuer Titel",
+            "kind": "AUFGABE",
+            "difficulty_points": "4",
+            "recurrence": "CUSTOM",
+            "recurrence_interval_days": "2",
+            "required_assignees": "1",
+        },
+    )
+    assert resp.status_code == 302
+    db.session.refresh(definition)
+    assert definition.title == "Neuer Titel"
+    assert definition.difficulty_points == 4
+    assert definition.recurrence == Recurrence.CUSTOM
+    assert definition.recurrence_interval_days == 2
+
+
+def test_delete_removes_definition_and_occurrences(app):
+    hauswart = _make_user("Hannes", role=Role.HAUSWART)
+    _make_user("Bewohner", role=Role.HAUSBEWOHNER)
+    client = app.test_client()
+    _login(client, hauswart)
+
+    client.post(
+        "/tasks/",
+        data={
+            "title": "Zu löschen",
+            "difficulty_points": "2",
+            "recurrence": "WEEKLY",
+            "anchor_weekday": "1",
+            "required_assignees": "1",
+        },
+    )
+    definition = db.session.query(TaskDefinition).one()
+    assert db.session.query(TaskOccurrence).count() >= 1
+
+    resp = client.post(f"/tasks/{definition.id}/delete")
+    assert resp.status_code == 302
+    assert db.session.query(TaskDefinition).count() == 0
+    assert db.session.query(TaskOccurrence).count() == 0
+
+
+def test_resident_cannot_edit_or_delete(app):
+    user = _make_user("Lina", role=Role.HAUSBEWOHNER)
+    client = app.test_client()
+    _login(client, user)
+
+    definition = TaskDefinition(
+        title="X", difficulty_points=1, required_assignees=1, is_active=True
+    )
+    db.session.add(definition)
+    db.session.commit()
+
+    assert client.get(f"/tasks/{definition.id}/edit").status_code == 403
+    assert client.post(f"/tasks/{definition.id}/edit", data={"title": "Y"}).status_code == 403
+    assert client.post(f"/tasks/{definition.id}/delete").status_code == 403
+
+
 # ---------------------------------------------------------------------------
 # Entwurf + Aktivieren (Bootstrapping vor dem WG-Start)
 # ---------------------------------------------------------------------------

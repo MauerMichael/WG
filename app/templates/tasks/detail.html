@@ -5,17 +5,31 @@
 
 {% block content %}
 <section class="space-y-6">
-  {% set deactivate_action %}
-    {% if can_manage and definition.is_active %}
-      <form method="post" action="{{ url_for('tasks.deactivate', definition_id=definition.id) }}">
+  {% set manage_actions %}
+    {% if can_manage %}
+      <div class="flex flex-wrap items-center gap-1.5">
+        <a href="{{ url_for('tasks.edit', definition_id=definition.id) }}" class="btn btn-ghost btn-sm">
+          {{ icon("pencil", "h-4 w-4") }}Bearbeiten
+        </a>
+        {% if definition.is_active %}
+          <form method="post" action="{{ url_for('tasks.deactivate', definition_id=definition.id) }}">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button type="submit" class="btn btn-danger btn-sm">
-          {{ icon("trash", "h-4 w-4") }}Deaktivieren
-        </button>
-      </form>
+            <button type="submit" class="btn btn-ghost btn-sm">
+              {{ icon("x", "h-4 w-4") }}Deaktivieren
+            </button>
+          </form>
+        {% endif %}
+        <form method="post" action="{{ url_for('tasks.delete', definition_id=definition.id) }}"
+              onsubmit="return confirm('Aufgabe und alle ihre Termine endgültig löschen?');">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn btn-danger btn-sm">
+            {{ icon("trash", "h-4 w-4") }}Löschen
+          </button>
+        </form>
+      </div>
     {% endif %}
   {% endset %}
-  {{ page_header(definition.title, action=deactivate_action) }}
+  {{ page_header(definition.title, action=manage_actions) }}
 
   <div class="flex flex-wrap items-center gap-2">
     {{ badge(recurrence_labels[definition.recurrence], "info") }}
