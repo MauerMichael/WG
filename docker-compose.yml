@@ -1,16 +1,21 @@
-# Production-Stack: nur die App (gunicorn).
+# Production-Stack: WG-App, eingehaengt am existierenden n8n-Traefik.
 #
-# Reverse-Proxy / HTTPS uebernimmt der schon laufende n8n-Traefik auf der VPS
-# (Port 80/443). Vorerst mappen wir die App direkt auf Host-Port 8000 fuer
-# einen schnellen ersten Test ueber http://<vps>:8000.
-# Naechster Schritt: Traefik-Labels + HTTPS.
+# Traefik laeuft auf der VPS im Netzwerk n8n_default, hoert auf 80/443,
+# holt automatisch HTTPS-Certs (mytlschallenge = Let's Encrypt) und routet
+# nach Host-Header.
 #
 # Postgres laeuft als eigener Container auf der VPS (Port 32770 am Host).
+# Die App spricht ueber host.docker.internal:32770 mit Postgres.
+#
+# In .env auf der VPS NACH dieser Umstellung:
+#   - Zeile `SESSION_COOKIE_SECURE=false` entfernen (Default true ist jetzt
+#     korrekt, wir haben HTTPS)
+#   - Zeile `REMEMBER_COOKIE_SECURE=false` entfernen falls vorhanden
+#   - `USE_PROXY_FIX=true` HINZUFUEGEN (Traefik sendet X-Forwarded-Proto,
+#     ProxyFix muss daran glauben)
 #
 # Start:   docker compose up -d --build
 # Logs:    docker compose logs -f app
-# Update:  git pull && docker compose up -d --build
-# Schema:  docker compose exec app alembic upgrade head
 
 services:
   app:
@@ -18,7 +23,31 @@ services:
     container_name: wg-app
     restart: unless-stopped
     env_file: .env
-    ports:
-      - "8000:8000"
+    # Kein Host-Port-Mapping mehr — Traefik leitet intern via Docker-Netz.
+    expose:
+      - "8000"
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    networks:
+      - default
+      - traefik
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=n8n_default"
+      # Router: HTTP + HTTPS, auf wg.srv1368949.hstgr.cloud.
+      - "traefik.http.routers.wg.rule=Host(`wg.srv1368949.hstgr.cloud`)"
+      - "traefik.http.routers.wg.entrypoints=web,websecure"
+      - "traefik.http.routers.wg.tls=true"
+      - "traefik.http.routers.wg.tls.certresolver=mytlschallenge"
+      # Middleware: auto-Redirect HTTP -> HTTPS (analog zur n8n-Konfig).
+      - "traefik.http.routers.wg.middlewares=wg@docker"
+      - "traefik.http.middlewares.wg.headers.SSLRedirect=true"
+      - "traefik.http.middlewares.wg.headers.STSSeconds=31536000"
+      - "traefik.http.middlewares.wg.headers.STSIncludeSubdomains=true"
+      # Service: intern hoert die App auf 8000.
+      - "traefik.http.services.wg.loadbalancer.server.port=8000"
+
+networks:
+  traefik:
+    external: true
+    name: n8n_default
