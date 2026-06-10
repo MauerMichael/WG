@@ -31,6 +31,7 @@ from flask import (
     redirect,
     render_template,
     request,
+    session,
     url_for,
 )
 from flask_login import current_user, login_required, login_user, logout_user
@@ -129,7 +130,10 @@ def login_submit():
             next_url=next_url,
         ), 401
 
-    login_user(user)
+    # Session + Remember-Cookie permanent machen, sonst geht beim Tab-Schliessen
+    # alles verloren (Default = Browser-Session-Cookie).
+    session.permanent = True
+    login_user(user, remember=True)
     return _post_login_redirect(user, next_url)
 
 
@@ -200,7 +204,8 @@ def dev_login_as(user_id):
     user = db.session.get(User, user_id)
     if user is None:
         abort(404)
-    login_user(user)
+    session.permanent = True
+    login_user(user, remember=True)
     # Dev-Login umgeht must_change_password absichtlich (lokales Testen).
     if user.status == UserStatus.APPROVED:
         return redirect(url_for("dashboard.index"))

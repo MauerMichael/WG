@@ -15,11 +15,17 @@
  *     dem Cache, Update läuft im Hintergrund (output.css ist nicht gehasht).
  */
 
-// "wg-static-v1" ist nur ein Platzhalter: die /sw.js-Route (app/blueprints/pwa)
+// "wg-static-v2" ist nur ein Platzhalter: die /sw.js-Route (app/blueprints/pwa)
 // ersetzt ihn beim Ausliefern durch einen aus dem Asset-Inhalt abgeleiteten
 // Token, damit ein Deploy mit geänderter output.css den Cache sauber erneuert.
-const CACHE = "wg-static-v1";
+// Bumpen wenn sich die SW-Strategie geaendert hat — alte Caches werden im
+// activate-Hook unten ausgeraeumt.
+const CACHE = "wg-static-v2";
 const OFFLINE_URL = "/offline";
+// Wie lange (ms) maximal aufs Netz warten, bevor wir bei einer Navigation
+// auf Cache/Offline-Fallback ausweichen. Auf langsamen Mobile-Verbindungen
+// blockt der network-first-Wait sonst den Browser ewig.
+const NAV_TIMEOUT_MS = 2000;
 
 // Beim Install vorgeladen, damit die App-Hülle auch offline steht.
 const PRECACHE = [
@@ -69,14 +75,25 @@ self.addEventListener("fetch", (event) => {
   // Auth-Flow komplett in Ruhe lassen.
   if (url.pathname.startsWith("/auth/")) return;
 
-  // Seitenaufrufe: network-first mit Offline-Fallback.
+  // Seitenaufrufe: network-first MIT Timeout, damit der Browser auf langsamen
+  // Mobile-Verbindungen nicht ewig wartet. Wenn das Netz nicht innerhalb
+  // NAV_TIMEOUT_MS antwortet, fallen wir auf die Offline-Seite zurueck.
+  // Authentifizierte HTML-Seiten werden bewusst NICHT gecacht (pro-User-
+  // Inhalt) — daher kein stale-while-revalidate hier.
   if (req.mode === "navigate") {
     event.respondWith(
-      fetch(req).catch(() =>
-        caches
-          .match(OFFLINE_URL, { ignoreSearch: true })
-          .then((cached) => cached || Response.error())
-      )
+      (async () => {
+        const networkP = fetch(req).catch(() => null);
+        const timeoutP = new Promise((res) =>
+          setTimeout(() => res(null), NAV_TIMEOUT_MS)
+        );
+        const resp = await Promise.race([networkP, timeoutP]);
+        if (resp) return resp;
+        // Timeout oder Netz-Fehler -> Offline-Seite. Wenn auch die nicht im
+        // Cache ist (Erst-Besuch ohne Install), notgedrungen Response.error.
+        const offline = await caches.match(OFFLINE_URL, { ignoreSearch: true });
+        return offline || Response.error();
+      })()
     );
     return;
   }

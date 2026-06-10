@@ -8,6 +8,7 @@ kein psycopg verfügbar ist.
 from __future__ import annotations
 
 import os
+from datetime import timedelta
 
 
 def _normalize_db_url(url: str | None) -> str | None:
@@ -51,6 +52,12 @@ class BaseConfig:
     # Cookies / Session.
     SESSION_COOKIE_SAMESITE: str = "Lax"
     SESSION_COOKIE_HTTPONLY: bool = True
+    # Session bleibt 30 Tage gueltig (statt Browser-Tab-Lifetime).
+    PERMANENT_SESSION_LIFETIME: timedelta = timedelta(days=30)
+    # Flask-Login "remember me"-Cookie ebenfalls 30 Tage.
+    REMEMBER_COOKIE_DURATION: timedelta = timedelta(days=30)
+    REMEMBER_COOKIE_HTTPONLY: bool = True
+    REMEMBER_COOKIE_SAMESITE: str = "Lax"
 
     # Dev-Login (ohne Google). Erlaubt Einloggen als beliebiger User per Klick.
     # Niemals in Prod aktivieren.
@@ -65,11 +72,15 @@ class DevConfig(BaseConfig):
 
 class ProdConfig(BaseConfig):
     DEBUG: bool = False
-    # SECURE-Cookie standardmaessig an; ueber Env abschaltbar, falls die App
+    # SECURE-Cookies standardmaessig an; ueber Env abschaltbar, falls die App
     # (noch) ohne HTTPS lauft (Browser blockt sonst die Session ueber HTTP und
     # Flask-WTF wirft "CSRF session token is missing"). In .env:
     # SESSION_COOKIE_SECURE=false
+    # REMEMBER_COOKIE_SECURE=false
     SESSION_COOKIE_SECURE: bool = (
         os.environ.get("SESSION_COOKIE_SECURE", "true").lower() != "false"
+    )
+    REMEMBER_COOKIE_SECURE: bool = (
+        os.environ.get("REMEMBER_COOKIE_SECURE", "true").lower() != "false"
     )
     DEV_LOGIN_ENABLED: bool = False

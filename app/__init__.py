@@ -6,6 +6,7 @@ registriert alle Feature-Blueprints.
 
 from __future__ import annotations
 
+import os
 import uuid
 from datetime import date
 from pathlib import Path
@@ -50,10 +51,19 @@ def create_app(config_name: str = "dev") -> Flask:
     # via WTF_CSRF_ENABLED=False (conftest.py) deaktiviert.
     csrf.init_app(app)
 
-    # ProxyFix: wenn die App hinter einem Reverse-Proxy (Caddy/Nginx) laeuft,
-    # ohne diesen Wrapper sieht Flask nur den Proxy als Client, denkt es laeuft
-    # auf HTTP und setzt secure-Cookies nicht. Im Dev (kein Proxy) harmless.
-    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+    # ProxyFix: NUR aktivieren wenn die App tatsaechlich hinter einem
+    # Reverse-Proxy (Caddy/Nginx/Traefik) laeuft. Ohne Proxy davor wuerde
+    # ProxyFix nichts oder falsche X-Forwarded-Header lesen — z.B. Mobile-
+    # Clients senden andere Header und Flask wuerde dann ggf. faelschlich
+    # https-Cookies setzen. In .env explizit `USE_PROXY_FIX=true` setzen,
+    # sobald ein Reverse-Proxy davor steht.
+    if os.environ.get("USE_PROXY_FIX", "false").lower() == "true":
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+
+    # Browser-Cache fuer Static-Assets (output.css ~52 KB, htmx.min.js ~47 KB):
+    # 7 Tage. Bei dringender Aktualisierung im Browser per Strg+Shift+R neu
+    # ziehen — beim naechsten Tailwind-Rebuild aendert sich der Inhalt eh.
+    app.config.setdefault("SEND_FILE_MAX_AGE_DEFAULT", 7 * 24 * 60 * 60)
 
     # Google-OAuth wurde komplett entfernt (Username+Passwort statt OAuth).
     # ``google_sub`` bleibt als Spalte erhalten, ist aber ungenutzt.
