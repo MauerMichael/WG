@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 import secrets
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from flask import (
     Blueprint,
@@ -35,6 +35,8 @@ from app.blueprints.auth import (
 from app.domain.enums import Role, UserStatus
 from app.extensions import db
 from app.models.audit import AuditLog
+from app.models.karma import KarmaEvent
+from app.models.task import TaskOccurrence
 from app.models.user import User, UserRole
 from app.services import scheduling
 
@@ -468,6 +470,103 @@ def reset_password(user_id: str):
         )
     flash(
         f"Neues temporaeres Passwort fuer {user.name}: {temp_password}",
+        "success",
+    )
+    return redirect(url_for("admin.users"))
+
+
+# ---------------------------------------------------------------------------
+# Wartungs-Aktionen
+# ---------------------------------------------------------------------------
+
+
+@bp.route("/maintenance/rebalance", methods=["POST"])
+@login_required
+def maintenance_rebalance():
+    """Triggert manuell rebalance_open_assignments fuer die ganze WG."""
+    require_admin_or_hauswart()
+    swaps = scheduling.rebalance_open_assignments(db.session)
+    _audit(
+        "maintenance.rebalance",
+        current_user,
+        {"swaps": swaps},
+    )
+    db.session.commit()
+    if swaps:
+        flash(f"{swaps} offene Aufgabe(n) neu verteilt.", "success")
+    else:
+        flash("Verteilung war schon ausgewogen — keine Aenderungen.", "info")
+    return redirect(url_for("admin.users"))
+
+
+@bp.route("/maintenance/reset-stats", methods=["POST"])
+@login_required
+def maintenance_reset_stats():
+    """Setzt Statistiken + Historie zurueck (destruktiv).
+
+    Loescht:
+    - Alle KarmaEvents (HONOR + PENALTY)
+    - Alle vergangenen Occurrences inkl. Assignments (period_end < heute)
+    - User.last_assigned_at = NULL (Tiebreak-Reset)
+
+    Behaelt:
+    - TaskDefinitions + ihre aktive Schedule
+    - Aktuelle + zukuenftige Occurrences (laufende Verteilung bleibt heile)
+    - Bewohner, Rollen, Absences, Einkauf
+
+    Anschliessend wird ein Rebalance-Lauf gestartet, damit der Score-Reset
+    sofort sichtbar wird.
+    """
+    require_admin_or_hauswart()
+    if not user_has_role(current_user, Role.ADMIN):
+        abort(403)  # Reset ist nur fuer Admins, nicht reine Hauswarte.
+
+    today = date.today()
+
+    karma_deleted = db.session.query(KarmaEvent).delete(synchronize_session=False)
+
+    # Vergangene Occurrences cascadet ueber FK auf TaskAssignments + ihre
+    # StepCompletions, KarmaEvents wurden eh schon entsorgt.
+    past_occ_ids = [
+        oid for (oid,) in db.session.query(TaskOccurrence.id).filter(
+            TaskOccurrence.period_end < today
+        ).all()
+    ]
+    past_occ_deleted = 0
+    if past_occ_ids:
+        past_occ_deleted = (
+            db.session.query(TaskOccurrence)
+            .filter(TaskOccurrence.id.in_(past_occ_ids))
+            .delete(synchronize_session=False)
+        )
+
+    # last_assigned_at fuer alle User leeren.
+    last_assigned_reset = (
+        db.session.query(User)
+        .update({User.last_assigned_at: None}, synchronize_session=False)
+    )
+
+    db.session.flush()
+    # Direkt rebalancen, damit alles fair startet.
+    swaps = scheduling.rebalance_open_assignments(db.session)
+
+    _audit(
+        "maintenance.reset_stats",
+        current_user,
+        {
+            "karma_deleted": int(karma_deleted or 0),
+            "past_occurrences_deleted": int(past_occ_deleted or 0),
+            "users_last_assigned_reset": int(last_assigned_reset or 0),
+            "rebalance_swaps": swaps,
+        },
+    )
+    db.session.commit()
+    flash(
+        (
+            f"Reset durchgefuehrt: {karma_deleted} Karma-Events + "
+            f"{past_occ_deleted} vergangene Termine geloescht. "
+            f"{swaps} Aufgabe(n) neu verteilt."
+        ),
         "success",
     )
     return redirect(url_for("admin.users"))

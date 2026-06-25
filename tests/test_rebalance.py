@@ -254,6 +254,89 @@ def test_admin_grant_hausbewohner_triggers_rebalance(app):
     assert counts.get(gast.id, 0) >= 1
 
 
+def test_maintenance_rebalance_route_distributes(app):
+    """Admin-Button „Jetzt neu verteilen" loest rebalance live aus."""
+    admin = _make_user("Admin", roles=[Role.ADMIN, Role.HAUSBEWOHNER])
+    anna = _make_user("Anna", roles=[Role.HAUSBEWOHNER])
+    _ = _make_user("Bea", roles=[Role.HAUSBEWOHNER])
+    d = _add_definition("Mülldienst")
+    # Anna allein hat 4 zukuenftige Aufgaben — Reset soll's umverteilen.
+    for i in range(4):
+        _add_occurrence(d, days_ahead=3 + i * 7, assignees=[anna])
+    db.session.commit()
+
+    client = app.test_client()
+    _login(client, admin)
+    resp = client.post("/admin/maintenance/rebalance")
+    assert resp.status_code == 302
+
+    counts: dict = {}
+    for a in db.session.query(TaskAssignment).filter_by(status=AssignmentStatus.OPEN).all():
+        counts[a.user_id] = counts.get(a.user_id, 0) + 1
+    # Nach Rebalance hat Anna nicht mehr alle 4.
+    assert counts.get(anna.id, 0) < 4
+
+
+def test_maintenance_reset_wipes_karma_and_past(app):
+    """Reset loescht Karma + vergangene Occurrences, behaelt zukuenftige."""
+    from datetime import datetime, timezone
+    from app.domain.enums import KarmaKind
+    from app.models.karma import KarmaEvent
+
+    admin = _make_user("Admin", roles=[Role.ADMIN, Role.HAUSBEWOHNER])
+    anna = _make_user("Anna", roles=[Role.HAUSBEWOHNER])
+    d = _add_definition("Mülldienst")
+    # Eine vergangene + eine zukuenftige Occurrence.
+    past_start = date.today() - timedelta(days=10)
+    past = TaskOccurrence(
+        task_definition_id=d.id,
+        period_start=past_start,
+        period_end=past_start + timedelta(days=2),
+        due_date=past_start,
+        status=TaskStatus.OPEN,
+    )
+    db.session.add(past)
+    future = _add_occurrence(d, days_ahead=10, assignees=[anna])
+    db.session.flush()
+    db.session.add(
+        TaskAssignment(occurrence_id=past.id, user_id=anna.id, status=AssignmentStatus.DONE)
+    )
+    # Karma-Event.
+    db.session.add(
+        KarmaEvent(
+            user_id=anna.id,
+            kind=KarmaKind.HONOR,
+            points=5,
+            occurred_at=datetime.now(timezone.utc),
+        )
+    )
+    anna.last_assigned_at = datetime.now(timezone.utc)
+    db.session.commit()
+    past_id = past.id
+    future_id = future.id
+
+    client = app.test_client()
+    _login(client, admin)
+    resp = client.post("/admin/maintenance/reset-stats")
+    assert resp.status_code == 302
+
+    assert db.session.query(KarmaEvent).count() == 0
+    # Vergangene weg, zukuenftige da.
+    assert db.session.get(TaskOccurrence, past_id) is None
+    assert db.session.get(TaskOccurrence, future_id) is not None
+    refreshed = db.session.get(User, anna.id)
+    assert refreshed.last_assigned_at is None
+
+
+def test_maintenance_reset_blocked_for_hauswart_only(app):
+    """Reine Hauswarte (ohne ADMIN-Rolle) duerfen den Reset nicht ausloesen."""
+    hw = _make_user("Heinz", roles=[Role.HAUSWART])
+    client = app.test_client()
+    _login(client, hw)
+    resp = client.post("/admin/maintenance/reset-stats")
+    assert resp.status_code == 403
+
+
 def test_admin_create_user_triggers_rebalance(app):
     """new_user_create legt User an und rebalanced."""
     admin = _make_user("Admin", roles=[Role.ADMIN, Role.HAUSBEWOHNER])

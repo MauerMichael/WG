@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "components/icons.html" import icon %}
 {% from "components/ui.html" import page_header, empty_state %}
 
 {% block title %}Benutzer verwalten – WG{% endblock %}
@@ -23,5 +24,35 @@
   {% else %}
     {{ empty_state("users", "Keine Benutzer vorhanden.") }}
   {% endif %}
+
+  {# ---------- Wartung ---------- #}
+  <div class="card space-y-4">
+    <div class="space-y-1">
+      <h2 class="text-sm font-extrabold uppercase tracking-wide text-slate-500">Wartung</h2>
+      <p class="text-xs text-slate-500">
+        Manuelle Verteilung und Stats-Reset. Cron läuft sonst täglich automatisch.
+      </p>
+    </div>
+
+    <div class="flex flex-wrap gap-2">
+      <form method="post" action="{{ url_for('admin.maintenance_rebalance') }}"
+            onsubmit="return confirm('Offene zukünftige Aufgaben jetzt neu verteilen?');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-primary btn-sm">
+          {{ icon("undo", "h-4 w-4") }}Jetzt neu verteilen
+        </button>
+      </form>
+
+      {% if user_has_any_role(current_user, Role.ADMIN) %}
+        <form method="post" action="{{ url_for('admin.maintenance_reset_stats') }}"
+              onsubmit="return confirm('ACHTUNG: Alle Karma-Punkte + vergangenen Termine werden gelöscht. Aktuelle/zukünftige Aufgaben bleiben. Fortfahren?');">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn btn-danger btn-sm">
+            {{ icon("trash", "h-4 w-4") }}Stats + Historie zurücksetzen
+          </button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
 </section>
 {% endblock %}
