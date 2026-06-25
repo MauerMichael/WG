@@ -73,7 +73,11 @@ DEFINITIONS: list[dict] = [
         "recurrence_interval_days": 2,
         "difficulty": 2,
         "required": 1,
-        "description": "Abends einraeumen + starten, am naechsten Morgen ausraeumen.",
+        "description": (
+            "Abends nach dem Essen einraeumen und starten. Am naechsten "
+            "Morgen ausraeumen und das saubere Geschirr zurueck in die "
+            "Schraenke."
+        ),
         "steps": [
             {"name": "Einraeumen + starten", "day_offset": 0, "time": time(19, 0)},
             {"name": "Ausraeumen", "day_offset": 1, "time": time(9, 0)},
@@ -87,7 +91,11 @@ DEFINITIONS: list[dict] = [
         "recurrence_interval_days": None,
         "difficulty": 3,
         "required": 1,
-        "description": "Woechentlicher Check — wenn was zu meckern ist, direkt mit der Person sprechen.",
+        "description": (
+            "Woechentliche Sichtkontrolle: Klobrille gereinigt, Klorolle voll, "
+            "Buerste sauber, Boden gewischt. Bei Maengeln direkt mit dem "
+            "letzten Zugewiesenen sprechen."
+        ),
     },
     {
         "title": "Toilette 2 (Check)",
@@ -97,7 +105,11 @@ DEFINITIONS: list[dict] = [
         "recurrence_interval_days": None,
         "difficulty": 3,
         "required": 1,
-        "description": "Woechentlicher Check — wenn was zu meckern ist, direkt mit der Person sprechen.",
+        "description": (
+            "Woechentliche Sichtkontrolle: Klobrille gereinigt, Klorolle voll, "
+            "Buerste sauber, Boden gewischt. Bei Maengeln direkt mit dem "
+            "letzten Zugewiesenen sprechen."
+        ),
     },
     {
         "title": "Toilette 3 (Check)",
@@ -107,7 +119,11 @@ DEFINITIONS: list[dict] = [
         "recurrence_interval_days": None,
         "difficulty": 3,
         "required": 1,
-        "description": "Woechentlicher Check — wenn was zu meckern ist, direkt mit der Person sprechen.",
+        "description": (
+            "Woechentliche Sichtkontrolle: Klobrille gereinigt, Klorolle voll, "
+            "Buerste sauber, Boden gewischt. Bei Maengeln direkt mit dem "
+            "letzten Zugewiesenen sprechen."
+        ),
     },
     {
         "title": "Toilette 4 (Check)",
@@ -117,7 +133,11 @@ DEFINITIONS: list[dict] = [
         "recurrence_interval_days": None,
         "difficulty": 3,
         "required": 1,
-        "description": "Woechentlicher Check — wenn was zu meckern ist, direkt mit der Person sprechen.",
+        "description": (
+            "Woechentliche Sichtkontrolle: Klobrille gereinigt, Klorolle voll, "
+            "Buerste sauber, Boden gewischt. Bei Maengeln direkt mit dem "
+            "letzten Zugewiesenen sprechen."
+        ),
     },
     {
         "title": "Kuechendienst",
@@ -127,7 +147,11 @@ DEFINITIONS: list[dict] = [
         "recurrence_interval_days": None,
         "difficulty": 7,
         "required": 1,
-        "description": "Woechentlicher Check — bei Bedarf Hauswart anschreiben fuer Event-Aufgaben.",
+        "description": (
+            "Taegliche Sichtkontrolle: Spuele leer, Arbeitsflaeche sauber, "
+            "Muell nicht ueberfuellt, Geschirrspueler bedient. Maengel direkt "
+            "mit Verursacher klaeren."
+        ),
     },
     {
         "title": "Muelldienst",
@@ -137,7 +161,10 @@ DEFINITIONS: list[dict] = [
         "recurrence_interval_days": None,
         "difficulty": 5,
         "required": 1,
-        "description": "Muelltonnen rausstellen + reinholen, Muell-Logistik fuer 2 Wochen.",
+        "description": (
+            "Muelltonnen zum richtigen Termin zur Strasse stellen und nach "
+            "Abholung wieder reinholen. Gelben Sack laut Plan vorbereiten."
+        ),
     },
     # Random Demo-Aufgaben fuer mehr Vielfalt in der Vorstellung.
     {

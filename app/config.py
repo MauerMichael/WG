@@ -63,6 +63,18 @@ class BaseConfig:
     # Niemals in Prod aktivieren.
     DEV_LOGIN_ENABLED: bool = False
 
+    # Hinweis-Text, der auf JEDEM Dienst (TaskKind.DIENST) automatisch als
+    # gelbe Notice-Box unter die Beschreibung gerendert wird. So muss der Hinweis
+    # nicht pro Aufgabe in die Beschreibung eingepflegt werden — Aenderung am
+    # zentralen Text greift sofort fuer alle Dienste.
+    # Per .env-Eintrag ``HAUSWART_REPORT_NOTICE=...`` ueberschreibbar.
+    HAUSWART_REPORT_NOTICE: str = os.environ.get(
+        "HAUSWART_REPORT_NOTICE",
+        "Nach der Kontrolle bitte kurz eine WhatsApp an Michael schicken — "
+        "basierend auf deiner Nachricht entscheide ich, ob der Dienst als "
+        "erledigt zaehlt.",
+    )
+
 
 class DevConfig(BaseConfig):
     DEBUG: bool = True

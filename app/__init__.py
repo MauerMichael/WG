@@ -157,4 +157,14 @@ def create_app(config_name: str = "dev") -> Flask:
         except Exception:
             return {"pending_review_count": 0}
 
+    # `hauswart_report_notice` global verfuegbar — wird in occurrence_card +
+    # detail.html bei jedem DIENST als gelbe Notice-Box gerendert.
+    @app.context_processor
+    def _inject_hauswart_report_notice() -> dict:
+        return {
+            "hauswart_report_notice": app.config.get(
+                "HAUSWART_REPORT_NOTICE", ""
+            )
+        }
+
     return app
