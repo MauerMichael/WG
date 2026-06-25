@@ -27,7 +27,7 @@ Vorbereiten der WG, bevor genug Bewohner da sind.
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from functools import wraps
 
 from flask import (
@@ -63,6 +63,8 @@ from app.models.task import (
     TaskDefinition,
     TaskDefinitionEligibleUser,
     TaskOccurrence,
+    TaskStep,
+    TaskStepCompletion,
 )
 from app.models.user import User, UserRole
 from app.services import handovers, scheduling
@@ -441,12 +443,15 @@ def new() -> str:
             "anchor_day_of_month": "1",
             "required_assignees": 1,
             "due_date": "",
+            "due_time": "",
             "eligible_user_ids": [],
             "save_as_draft": False,
+            "steps": [],
         },
         errors={},
         min_points=MIN_DIFFICULTY_POINTS,
         max_points=MAX_DIFFICULTY_POINTS,
+        max_task_steps=MAX_TASK_STEPS,
     )
 
 
@@ -457,6 +462,55 @@ def _parse_int(value: str | None, default: int | None = None) -> int | None:
         return int(value)
     except (TypeError, ValueError):
         return default
+
+
+def _parse_due_time(value: str | None) -> time | None:
+    """Parsed HH:MM oder HH:MM:SS in ein ``time``; sonst None."""
+    if not value:
+        return None
+    raw = value.strip()
+    for fmt in ("%H:%M", "%H:%M:%S"):
+        try:
+            return datetime.strptime(raw, fmt).time()
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+# Maximal so viele Schritte unterstützen wir pro Aufgabe; verhindert Form-DoS.
+MAX_TASK_STEPS = 5
+
+
+def _parse_steps(form) -> list[dict]:
+    """Liest aus dem Form-Multipart die Schritt-Liste (Name + Tag + Uhrzeit).
+
+    Erwartet Felder ``step_name_0..N``, ``step_day_offset_0..N``,
+    ``step_time_0..N``. Schritte mit leerem Namen werden ignoriert (so kann der
+    Form-Renderer einfach leere Slots zeigen).
+    """
+    out: list[dict] = []
+    for i in range(MAX_TASK_STEPS):
+        name = (form.get(f"step_name_{i}") or "").strip()
+        if not name:
+            continue
+        day_offset = _parse_int(form.get(f"step_day_offset_{i}"), 0) or 0
+        time_of_day = _parse_due_time(form.get(f"step_time_{i}"))
+        out.append(
+            {"name": name, "day_offset": day_offset, "time_of_day": time_of_day}
+        )
+    return out
+
+
+def _steps_to_form(steps: list[TaskStep]) -> list[dict]:
+    """Serialisiert die DB-Schritte für den Form-Renderer."""
+    return [
+        {
+            "name": s.name,
+            "day_offset": s.day_offset,
+            "time": s.time_of_day.strftime("%H:%M") if s.time_of_day else "",
+        }
+        for s in sorted(steps, key=lambda s: s.step_order)
+    ]
 
 
 @bp.route("/", methods=["POST"])
@@ -478,6 +532,9 @@ def create():
     required = _parse_int(form.get("required_assignees"), 1) or 1
     eligible_ids = form.getlist("eligible_user_ids")
     due_date_raw = (form.get("due_date") or "").strip()
+    due_time_raw = (form.get("due_time") or "").strip()
+    due_time = _parse_due_time(due_time_raw)
+    steps = _parse_steps(form)
     save_as_draft = bool(form.get("save_as_draft"))
 
     errors: dict[str, str] = {}
@@ -540,12 +597,22 @@ def create():
                     "anchor_day_of_month": anchor_dom_raw if anchor_dom_raw not in (None, "") else "1",
                     "required_assignees": required,
                     "due_date": due_date_raw,
+                    "due_time": due_time_raw,
                     "eligible_user_ids": eligible_ids,
                     "save_as_draft": save_as_draft,
+                    "steps": [
+                        {
+                            "name": s["name"],
+                            "day_offset": s["day_offset"],
+                            "time": s["time_of_day"].strftime("%H:%M") if s["time_of_day"] else "",
+                        }
+                        for s in steps
+                    ],
                 },
                 errors=errors,
                 min_points=MIN_DIFFICULTY_POINTS,
                 max_points=MAX_DIFFICULTY_POINTS,
+                max_task_steps=MAX_TASK_STEPS,
             ),
             400,
         )
@@ -566,6 +633,7 @@ def create():
         anchor_day_of_month=anchor_day_of_month,
         required_assignees=required,
         is_active=not is_draft,
+        default_due_time=due_time,
         created_by_id=current_user.id,
     )
     db.session.add(definition)
@@ -579,6 +647,17 @@ def create():
         db.session.add(
             TaskDefinitionEligibleUser(task_definition_id=definition.id, user_id=uid)
         )
+    # Schritte anlegen.
+    for idx, s in enumerate(steps):
+        db.session.add(
+            TaskStep(
+                task_definition_id=definition.id,
+                step_order=idx,
+                name=s["name"],
+                day_offset=s["day_offset"],
+                time_of_day=s["time_of_day"],
+            )
+        )
     db.session.flush()
 
     if recurrence == Recurrence.NONE:
@@ -588,6 +667,7 @@ def create():
             period_start=due_date,
             period_end=due_date,
             due_date=due_date,
+            due_time=due_time,
             status=TaskStatus.OPEN,
         )
         db.session.add(occurrence)
@@ -715,6 +795,103 @@ def mark_done(occurrence_id: str):
     handovers.close_open_offer_for(db.session, assignment, "mark_done")
     db.session.commit()
 
+    if request.headers.get("HX-Request"):
+        return _render_done_swap(_load_occurrence_for_card(occ_uuid))
+    return redirect(request.referrer or url_for("tasks.index"))
+
+
+@bp.route("/<occurrence_id>/step/<step_id>/done", methods=["POST"])
+@_require_approved
+def step_done(occurrence_id: str, step_id: str):
+    """Bewohner markiert einen Schritt einer mehrteiligen Aufgabe als erledigt.
+
+    Wenn nach diesem Tick **alle** Schritte × **alle** Assignees fertig sind,
+    wird die Occurrence als Ganzes auf DONE gesetzt (Punkte werden verteilt).
+    """
+    occ_uuid = _parse_uuid(occurrence_id)
+    step_uuid = _parse_uuid(step_id)
+    occurrence = db.session.get(TaskOccurrence, occ_uuid)
+    if occurrence is None:
+        abort(404)
+    step = db.session.get(TaskStep, step_uuid)
+    if step is None or step.task_definition_id != occurrence.task_definition_id:
+        abort(404)
+
+    assignment = next(
+        (
+            a
+            for a in occurrence.assignments
+            if a.user_id == current_user.id and a.status == AssignmentStatus.OPEN
+        ),
+        None,
+    )
+    if assignment is None:
+        abort(403)
+    if occurrence.period_start > date.today():
+        if request.headers.get("HX-Request"):
+            return _render_done_swap(_load_occurrence_for_card(occ_uuid))
+        flash("Diese Aufgabe ist noch nicht dran.", "info")
+        return redirect(request.referrer or url_for("tasks.index"))
+
+    already = (
+        db.session.query(TaskStepCompletion)
+        .filter_by(assignment_id=assignment.id, step_id=step.id)
+        .first()
+    )
+    if already is None:
+        db.session.add(
+            TaskStepCompletion(assignment_id=assignment.id, step_id=step.id)
+        )
+        db.session.flush()
+
+    # Alle Schritte aller Assignees fertig? → ganze Occurrence DONE.
+    db.session.refresh(occurrence)
+    if scheduling.is_occurrence_step_complete(occurrence):
+        for a in occurrence.assignments:
+            if a.status == AssignmentStatus.OPEN:
+                scheduling.mark_done(db.session, a, current_user)
+        handovers.close_open_offer_for(db.session, assignment, "step_done")
+
+    db.session.commit()
+    if request.headers.get("HX-Request"):
+        return _render_done_swap(_load_occurrence_for_card(occ_uuid))
+    return redirect(request.referrer or url_for("tasks.index"))
+
+
+@bp.route("/<occurrence_id>/step/<step_id>/undo", methods=["POST"])
+@_require_approved
+def step_undo(occurrence_id: str, step_id: str):
+    """Bewohner hebt das Abhaken eines Schritts wieder auf (nur eigener)."""
+    occ_uuid = _parse_uuid(occurrence_id)
+    step_uuid = _parse_uuid(step_id)
+    occurrence = db.session.get(TaskOccurrence, occ_uuid)
+    if occurrence is None:
+        abort(404)
+    step = db.session.get(TaskStep, step_uuid)
+    if step is None or step.task_definition_id != occurrence.task_definition_id:
+        abort(404)
+
+    assignment = next(
+        (
+            a
+            for a in occurrence.assignments
+            if a.user_id == current_user.id
+        ),
+        None,
+    )
+    if assignment is None:
+        abort(403)
+
+    completion = (
+        db.session.query(TaskStepCompletion)
+        .filter_by(assignment_id=assignment.id, step_id=step.id)
+        .first()
+    )
+    if completion is not None:
+        db.session.delete(completion)
+        db.session.flush()
+
+    db.session.commit()
     if request.headers.get("HX-Request"):
         return _render_done_swap(_load_occurrence_for_card(occ_uuid))
     return redirect(request.referrer or url_for("tasks.index"))
@@ -884,12 +1061,19 @@ def edit(definition_id: str):
                 if (definition.recurrence == Recurrence.NONE and definition.occurrences)
                 else ""
             ),
+            "due_time": (
+                definition.default_due_time.strftime("%H:%M")
+                if definition.default_due_time
+                else ""
+            ),
             "eligible_user_ids": eligible_ids,
             "save_as_draft": False,
+            "steps": _steps_to_form(definition.steps or []),
         },
         errors={},
         min_points=MIN_DIFFICULTY_POINTS,
         max_points=MAX_DIFFICULTY_POINTS,
+        max_task_steps=MAX_TASK_STEPS,
         form_action=url_for("tasks.update", definition_id=str(definition.id)),
         page_title=f"„{definition.title}" + "“ bearbeiten",
         page_subtitle="Änderungen wirken sich auf alle künftigen Perioden aus.",
@@ -927,6 +1111,9 @@ def update(definition_id: str):
     anchor_dom_raw = form.get("anchor_day_of_month")
     required = _parse_int(form.get("required_assignees"), 1) or 1
     eligible_ids = form.getlist("eligible_user_ids")
+    due_time_raw = (form.get("due_time") or "").strip()
+    due_time = _parse_due_time(due_time_raw)
+    steps = _parse_steps(form)
 
     errors: dict[str, str] = {}
     if not title:
@@ -987,12 +1174,22 @@ def update(definition_id: str):
                     "anchor_day_of_month": anchor_dom_raw if anchor_dom_raw not in (None, "") else "1",
                     "required_assignees": required,
                     "due_date": "",
+                    "due_time": due_time_raw,
                     "eligible_user_ids": eligible_ids,
                     "save_as_draft": False,
+                    "steps": [
+                        {
+                            "name": s["name"],
+                            "day_offset": s["day_offset"],
+                            "time": s["time_of_day"].strftime("%H:%M") if s["time_of_day"] else "",
+                        }
+                        for s in steps
+                    ],
                 },
                 errors=errors,
                 min_points=MIN_DIFFICULTY_POINTS,
                 max_points=MAX_DIFFICULTY_POINTS,
+                max_task_steps=MAX_TASK_STEPS,
                 form_action=url_for("tasks.update", definition_id=str(definition.id)),
                 page_title=f"„{definition.title}" + "“ bearbeiten",
                 page_subtitle="Änderungen wirken sich auf alle künftigen Perioden aus.",
@@ -1012,6 +1209,7 @@ def update(definition_id: str):
     )
 
     # Felder aktualisieren.
+    due_time_changed = due_time != definition.default_due_time
     definition.title = title
     definition.description = description
     definition.kind = kind
@@ -1023,6 +1221,7 @@ def update(definition_id: str):
     definition.anchor_weekday = anchor_weekday
     definition.anchor_day_of_month = anchor_day_of_month
     definition.required_assignees = required
+    definition.default_due_time = due_time
 
     # Eligibility-Liste neu setzen.
     db.session.query(TaskDefinitionEligibleUser).filter_by(
@@ -1036,6 +1235,29 @@ def update(definition_id: str):
         db.session.add(
             TaskDefinitionEligibleUser(task_definition_id=definition.id, user_id=uid)
         )
+
+    # Steps komplett neu setzen (Cascade räumt alte + ihre Completions auf).
+    for old_step in list(definition.steps or []):
+        db.session.delete(old_step)
+    db.session.flush()
+    for idx, s in enumerate(steps):
+        db.session.add(
+            TaskStep(
+                task_definition_id=definition.id,
+                step_order=idx,
+                name=s["name"],
+                day_offset=s["day_offset"],
+                time_of_day=s["time_of_day"],
+            )
+        )
+
+    # Default-Uhrzeit-Änderung an künftige OPEN-Occurrences durchreichen,
+    # damit der Bewohner auf seiner Karte gleich die neue Zeit sieht.
+    if due_time_changed:
+        today_d = date.today()
+        for occ in definition.occurrences:
+            if occ.status == TaskStatus.OPEN and occ.period_start >= today_d:
+                occ.due_time = due_time
 
     # Schedule-Änderung -> alle OPEN-Occurrences in der Zukunft wegwerfen,
     # dann neu generieren. Vergangene + DONE bleiben in Ruhe.

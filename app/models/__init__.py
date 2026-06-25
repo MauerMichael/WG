@@ -15,6 +15,8 @@ from app.models.task import (
     TaskDefinition,
     TaskDefinitionEligibleUser,
     TaskOccurrence,
+    TaskStep,
+    TaskStepCompletion,
 )
 from app.models.user import User, UserRole
 
@@ -26,6 +28,8 @@ __all__ = [
     "TaskDefinitionEligibleUser",
     "TaskOccurrence",
     "TaskAssignment",
+    "TaskStep",
+    "TaskStepCompletion",
     "ShoppingItem",
     "AuditLog",
     "KarmaEvent",

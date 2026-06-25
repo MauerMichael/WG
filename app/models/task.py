@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, time
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
@@ -14,6 +14,7 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     String,
+    Time,
     UniqueConstraint,
     func,
 )
@@ -63,6 +64,8 @@ class TaskDefinition(db.Model):
     anchor_day_of_month: Mapped[int | None] = mapped_column(Integer, nullable=True)
     required_assignees: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # Default-Uhrzeit für generierte Occurrences (optional, z.B. „Müll Di 18:00").
+    default_due_time: Mapped[time | None] = mapped_column(Time, nullable=True)
     created_by_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="SET NULL"),
@@ -85,6 +88,13 @@ class TaskDefinition(db.Model):
     occurrences: Mapped[list["TaskOccurrence"]] = relationship(
         back_populates="task_definition",
         cascade="all, delete-orphan",
+    )
+    # Mehrteilige Aufgabe: Schritte mit eigener Tages-/Uhrzeit (z.B.
+    # Geschirrspüler einräumen abends + ausräumen morgens). Leer → einteilig.
+    steps: Mapped[list["TaskStep"]] = relationship(
+        back_populates="task_definition",
+        cascade="all, delete-orphan",
+        order_by="TaskStep.step_order",
     )
 
 
@@ -140,6 +150,9 @@ class TaskOccurrence(db.Model):
     period_start: Mapped[date] = mapped_column(Date, nullable=False)
     period_end: Mapped[date] = mapped_column(Date, nullable=False)
     due_date: Mapped[date] = mapped_column(Date, nullable=False)
+    # Uhrzeit (optional). Bei generate_occurrences aus default_due_time der
+    # Definition kopiert; kann pro Occurrence überschrieben werden.
+    due_time: Mapped[time | None] = mapped_column(Time, nullable=True)
     status: Mapped[TaskStatus] = mapped_column(
         Enum(TaskStatus, name="task_status"),
         nullable=False,
@@ -217,3 +230,92 @@ class TaskAssignment(db.Model):
         back_populates="assignment",
         cascade="all, delete-orphan",
     )
+    # Erledigt-Tracking für mehrteilige Aufgaben (Geschirrspüler einräumen +
+    # ausräumen). Leer bei einteiligen Tasks.
+    step_completions: Mapped[list["TaskStepCompletion"]] = relationship(
+        back_populates="assignment",
+        cascade="all, delete-orphan",
+    )
+
+
+class TaskStep(db.Model):
+    """Ein Schritt einer mehrteiligen Aufgabe (z.B. „Einräumen" + „Ausräumen").
+
+    Alle Schritte einer Occurrence gehen an **denselben Assignee** — der eine
+    Person, die einräumt, räumt auch aus. Die Reihenfolge legt ``step_order``
+    fest. ``day_offset`` und ``time_of_day`` bestimmen, wann der Schritt im
+    Periodenzeitraum fällig ist (z.B. Schritt „Einräumen" am Tag 0 um 19:00,
+    Schritt „Ausräumen" am Tag 1 um 09:00).
+    """
+
+    __tablename__ = "task_steps"
+    __table_args__ = (
+        UniqueConstraint(
+            "task_definition_id",
+            "step_order",
+            name="uq_task_step_def_order",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    task_definition_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("task_definitions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    step_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    day_offset: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    time_of_day: Mapped[time | None] = mapped_column(Time, nullable=True)
+
+    task_definition: Mapped[TaskDefinition] = relationship(back_populates="steps")
+    completions: Mapped[list["TaskStepCompletion"]] = relationship(
+        back_populates="step",
+        cascade="all, delete-orphan",
+    )
+
+
+class TaskStepCompletion(db.Model):
+    """Markiert, dass ein Assignee einen Schritt seiner Zuweisung erledigt hat.
+
+    Ein Eintrag pro (Assignment, Step). Sobald **alle** Schritte einer
+    Occurrence von ihrem Assignee abgehakt sind, wird die Occurrence als
+    Ganzes DONE.
+    """
+
+    __tablename__ = "task_step_completions"
+    __table_args__ = (
+        UniqueConstraint(
+            "assignment_id",
+            "step_id",
+            name="uq_task_step_completion_assignment_step",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    assignment_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("task_assignments.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    step_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("task_steps.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    completed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    assignment: Mapped[TaskAssignment] = relationship(back_populates="step_completions")
+    step: Mapped[TaskStep] = relationship(back_populates="completions")

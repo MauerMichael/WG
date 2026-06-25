@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% from "components/icons.html" import icon %}
+{% from "components/ui.html" import badge, page_header, empty_state, avatar, task_type_badge, task_type_border %}
+
+{% block title %}Archiv – WG{% endblock %}
+
+{% block content %}
+<section class="space-y-6">
+  {% include "components/_verwaltung_subnav.html" %}
+  {{ page_header("Archiv", "Bewertete Aufgaben nachschlagen (letzte 90 Tage)") }}
+
+  {# Filter-Leiste — submit-on-change. #}
+  <form method="get" action="{{ url_for('hauswart.archive') }}"
+        class="card flex flex-wrap items-end gap-3">
+    <div class="field min-w-[12rem] flex-1">
+      <label class="label" for="filter-user">Bewohner</label>
+      <select id="filter-user" class="input" name="user_id"
+              onchange="this.form.submit()">
+        <option value="">Alle Bewohner</option>
+        {% for resident in residents %}
+          <option value="{{ resident.id }}"
+                  {% if selected_user_id and resident.id == selected_user_id %}selected{% endif %}>
+            {{ resident.name }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field min-w-[10rem] flex-1">
+      <label class="label" for="filter-status">Status</label>
+      <select id="filter-status" class="input" name="status"
+              onchange="this.form.submit()">
+        <option value="">Alle</option>
+        <option value="APPROVED" {% if selected_status == 'APPROVED' %}selected{% endif %}>Genehmigt</option>
+        <option value="REJECTED" {% if selected_status == 'REJECTED' %}selected{% endif %}>Abgelehnt</option>
+        <option value="EXCUSED" {% if selected_status == 'EXCUSED' %}selected{% endif %}>Entschuldigt</option>
+      </select>
+    </div>
+    <div class="field min-w-[9rem]">
+      <label class="label" for="filter-from">Von</label>
+      <input id="filter-from" class="input" type="date" name="from"
+             value="{{ from_date }}" onchange="this.form.submit()">
+    </div>
+    <div class="field min-w-[9rem]">
+      <label class="label" for="filter-to">Bis</label>
+      <input id="filter-to" class="input" type="date" name="to"
+             value="{{ to_date }}" onchange="this.form.submit()">
+    </div>
+    <div class="flex items-center gap-2">
+      <noscript>
+        <button type="submit" class="btn btn-primary btn-sm">Anwenden</button>
+      </noscript>
+      {% if selected_user_id or selected_status or from_date or to_date %}
+        <a href="{{ url_for('hauswart.archive') }}" class="btn btn-ghost btn-sm">
+          {{ icon("undo", "h-4 w-4") }}Zurücksetzen
+        </a>
+      {% endif %}
+    </div>
+  </form>
+
+  {% if items %}
+    <div class="space-y-2">
+      {% for a in items %}
+        {% set occ = a.occurrence %}
+        {% set definition = occ.task_definition %}
+        <div class="card-muted space-y-2 {{ task_type_border(definition) }}">
+          <div class="flex flex-wrap items-start justify-between gap-3">
+            <div class="space-y-1 min-w-0">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="font-bold text-slate-900 truncate">{{ definition.title }}</span>
+                {{ task_type_badge(definition) }}
+              </div>
+              <p class="text-xs text-slate-500">
+                <span class="inline-flex items-center gap-1">
+                  {{ avatar(a.user, "h-5 w-5", "text-[10px]") }}{{ a.user.name }}
+                </span>
+                <span class="text-slate-300">·</span>
+                {{ occ.period_start.strftime('%d.%m.%Y') }}
+                {% if occ.period_end != occ.period_start %}
+                  – {{ occ.period_end.strftime('%d.%m.%Y') }}
+                {% endif %}
+                {% if a.reviewed_at %}
+                  <span class="text-slate-300">·</span>
+                  bewertet {{ a.reviewed_at.strftime('%d.%m.%Y') }}
+                {% endif %}
+              </p>
+              {% if a.review_note %}
+                <p class="text-xs text-slate-600 italic">„{{ a.review_note }}"</p>
+              {% endif %}
+            </div>
+            <div class="flex items-center gap-2">
+              {% if a.review_status.value == 'APPROVED' %}
+                {{ badge((a.points_earned|default(0)) ~ " Punkte", "neutral") }}
+                {{ badge("genehmigt", "success") }}
+              {% elif a.review_status.value == 'REJECTED' %}
+                {{ badge("abgelehnt", "danger") }}
+              {% elif a.review_status.value == 'EXCUSED' %}
+                {{ badge("entschuldigt", "info") }}
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    {{ empty_state("calendar", "Keine Einträge", "In diesem Zeitraum wurde nichts bewertet.") }}
+  {% endif %}
+</section>
+{% endblock %}

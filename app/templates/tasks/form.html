@@ -116,10 +116,51 @@
       </div>
     </div>
 
-    <div class="field" data-recurrence-field="due">
-      <label class="label">Fälligkeitsdatum (nur einmalige Aufgaben)</label>
-      <input type="date" name="due_date" value="{{ form.due_date }}" class="input">
-      {% if errors.due_date %}<p class="field-error">{{ errors.due_date }}</p>{% endif %}
+    <div class="grid gap-4 sm:grid-cols-2">
+      <div class="field" data-recurrence-field="due">
+        <label class="label">Fälligkeitsdatum (nur einmalige Aufgaben)</label>
+        <input type="date" name="due_date" value="{{ form.due_date }}" class="input">
+        {% if errors.due_date %}<p class="field-error">{{ errors.due_date }}</p>{% endif %}
+      </div>
+
+      <div class="field">
+        <label class="label">Uhrzeit (optional)</label>
+        <input type="time" name="due_time" value="{{ form.due_time|default('') }}" class="input">
+        <p class="text-xs text-slate-500">
+          Z.&nbsp;B. Event 19:00 Uhr, Müll-Dienst 18:00 Uhr.
+        </p>
+      </div>
+    </div>
+
+    {# Mehrteilige Aufgabe: bis zu 5 Schritte (Name + Tag-Offset + Uhrzeit).
+       Leere Schritte werden ignoriert. Alle Schritte gehen an denselben Assignee. #}
+    <div class="field">
+      <label class="label">Schritte (optional, mehrteilige Aufgabe)</label>
+      <p class="text-xs text-slate-500">
+        Z.&nbsp;B. Geschirrspüler einräumen abends + ausräumen morgens.
+        Leer lassen = einteilige Aufgabe. Alle Schritte werden vom gleichen Bewohner erledigt.
+      </p>
+      <div class="mt-2 space-y-2">
+        {% for i in range(max_task_steps|default(5)) %}
+          {% set s = form.steps[i] if form.steps and i < (form.steps|length) else {"name": "", "day_offset": 0, "time": ""} %}
+          <div class="grid gap-2 sm:grid-cols-[2fr,5rem,7rem] items-end">
+            <div>
+              <label class="label text-[0.7rem]">Name Schritt {{ i + 1 }}</label>
+              <input type="text" name="step_name_{{ i }}" value="{{ s.name }}" class="input"
+                     placeholder="{% if i == 0 %}z.B. Einräumen{% endif %}">
+            </div>
+            <div>
+              <label class="label text-[0.7rem]">Tag</label>
+              <input type="number" name="step_day_offset_{{ i }}" min="0" max="30"
+                     value="{{ s.day_offset|default(0) }}" class="input">
+            </div>
+            <div>
+              <label class="label text-[0.7rem]">Uhrzeit</label>
+              <input type="time" name="step_time_{{ i }}" value="{{ s.time|default('') }}" class="input">
+            </div>
+          </div>
+        {% endfor %}
+      </div>
     </div>
 
     <div class="field">

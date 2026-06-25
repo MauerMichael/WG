@@ -699,3 +699,267 @@ def test_resident_cannot_access_manage(app):
     client = app.test_client()
     _login(client, user)
     assert client.get("/tasks/verwalten").status_code == 403
+
+
+def test_aufgabe_card_shows_single_date_no_range(app):
+    """Eine AUFGABE darf keinen Periodenbereich (von–bis) zeigen, nur due_date."""
+    from app.domain.enums import AssignmentStatus, TaskStatus
+    from app.models.task import TaskAssignment
+
+    user = _make_user("Lina", role=Role.HAUSBEWOHNER)
+    definition = TaskDefinition(
+        title="Bohrmaschine zurückbringen",
+        kind=TaskKind.AUFGABE,
+        recurrence=Recurrence.NONE,
+        difficulty_points=2,
+        required_assignees=1,
+        is_active=True,
+    )
+    db.session.add(definition)
+    db.session.flush()
+    occ_day = date.today() + timedelta(days=3)
+    occ = TaskOccurrence(
+        task_definition_id=definition.id,
+        period_start=occ_day,
+        period_end=occ_day,
+        due_date=occ_day,
+        status=TaskStatus.OPEN,
+    )
+    db.session.add(occ)
+    db.session.flush()
+    db.session.add(
+        TaskAssignment(occurrence_id=occ.id, user_id=user.id, status=AssignmentStatus.OPEN)
+    )
+    db.session.commit()
+
+    client = app.test_client()
+    _login(client, user)
+    resp = client.get("/tasks/")
+    assert resp.status_code == 200
+    body = resp.data.decode("utf-8", "replace")
+    # Einzelnes Datum drin, kein „–" zwischen zwei Daten in dieser Karte.
+    assert occ_day.strftime("%d.%m.%Y") in body
+    assert f"{occ_day.strftime('%d.%m.')}–{occ_day.strftime('%d.%m.')}" not in body
+
+
+def test_due_time_persists_through_create(app):
+    from app.domain.enums import TaskKind as _TK
+
+    admin = _make_user("Admin", role=Role.HAUSWART)
+    client = app.test_client()
+    _login(client, admin)
+    resp = client.post(
+        "/tasks/",
+        data={
+            "title": "Event Filmabend",
+            "description": "",
+            "kind": _TK.AUFGABE.value,
+            "difficulty_points": 2,
+            "recurrence": Recurrence.NONE.value,
+            "required_assignees": 1,
+            "due_date": (date.today() + timedelta(days=2)).isoformat(),
+            "due_time": "19:00",
+        },
+    )
+    assert resp.status_code in (200, 302)
+    definition = (
+        db.session.query(TaskDefinition).filter_by(title="Event Filmabend").first()
+    )
+    assert definition is not None
+    assert definition.default_due_time is not None
+    assert definition.default_due_time.hour == 19
+    occ = definition.occurrences[0]
+    assert occ.due_time is not None
+    assert occ.due_time.hour == 19
+
+
+def test_create_with_steps_persists_steps(app):
+    admin = _make_user("Admin", role=Role.HAUSWART)
+    client = app.test_client()
+    _login(client, admin)
+    resp = client.post(
+        "/tasks/",
+        data={
+            "title": "Geschirrspüler",
+            "description": "Einräumen + Ausräumen",
+            "kind": TaskKind.AUFGABE.value,
+            "difficulty_points": 2,
+            "recurrence": Recurrence.CUSTOM.value,
+            "recurrence_interval_days": 2,
+            "required_assignees": 1,
+            "step_name_0": "Einräumen",
+            "step_day_offset_0": "0",
+            "step_time_0": "19:00",
+            "step_name_1": "Ausräumen",
+            "step_day_offset_1": "1",
+            "step_time_1": "09:00",
+        },
+    )
+    assert resp.status_code in (200, 302)
+    definition = (
+        db.session.query(TaskDefinition).filter_by(title="Geschirrspüler").first()
+    )
+    assert definition is not None
+    assert len(definition.steps) == 2
+    s0, s1 = sorted(definition.steps, key=lambda s: s.step_order)
+    assert s0.name == "Einräumen"
+    assert s0.day_offset == 0
+    assert s0.time_of_day.hour == 19
+    assert s1.name == "Ausräumen"
+    assert s1.day_offset == 1
+    assert s1.time_of_day.hour == 9
+
+
+def test_step_done_route_marks_completion(app):
+    from app.domain.enums import AssignmentStatus, TaskStatus
+    from app.models.task import TaskAssignment, TaskStep, TaskStepCompletion
+
+    user = _make_user("Lena", role=Role.HAUSBEWOHNER)
+    definition = TaskDefinition(
+        title="Geschirr",
+        kind=TaskKind.AUFGABE,
+        recurrence=Recurrence.CUSTOM,
+        recurrence_interval_days=2,
+        difficulty_points=2,
+        required_assignees=1,
+        is_active=True,
+    )
+    db.session.add(definition)
+    db.session.flush()
+    step1 = TaskStep(task_definition_id=definition.id, step_order=0, name="Einräumen", day_offset=0)
+    step2 = TaskStep(task_definition_id=definition.id, step_order=1, name="Ausräumen", day_offset=1)
+    db.session.add_all([step1, step2])
+    db.session.flush()
+    occ = TaskOccurrence(
+        task_definition_id=definition.id,
+        period_start=date.today(),
+        period_end=date.today() + timedelta(days=1),
+        due_date=date.today(),
+        status=TaskStatus.OPEN,
+    )
+    db.session.add(occ)
+    db.session.flush()
+    assignment = TaskAssignment(
+        occurrence_id=occ.id, user_id=user.id, status=AssignmentStatus.OPEN
+    )
+    db.session.add(assignment)
+    db.session.commit()
+
+    client = app.test_client()
+    _login(client, user)
+    # Schritt 1 abhaken.
+    resp = client.post(
+        f"/tasks/{occ.id}/step/{step1.id}/done",
+        headers={"HX-Request": "true"},
+    )
+    assert resp.status_code == 200
+    completions = (
+        db.session.query(TaskStepCompletion)
+        .filter_by(assignment_id=assignment.id)
+        .all()
+    )
+    assert len(completions) == 1
+    # Occurrence noch OPEN (Schritt 2 fehlt).
+    db.session.refresh(occ)
+    assert occ.status == TaskStatus.OPEN
+
+    # Schritt 2 abhaken → ganze Occurrence DONE.
+    client.post(
+        f"/tasks/{occ.id}/step/{step2.id}/done",
+        headers={"HX-Request": "true"},
+    )
+    db.session.refresh(occ)
+    assert occ.status == TaskStatus.DONE
+    db.session.refresh(assignment)
+    assert assignment.status == AssignmentStatus.DONE
+    assert assignment.points_earned == 2
+
+
+def test_step_undo_removes_completion(app):
+    from app.domain.enums import AssignmentStatus, TaskStatus
+    from app.models.task import TaskAssignment, TaskStep, TaskStepCompletion
+
+    user = _make_user("Lena", role=Role.HAUSBEWOHNER)
+    definition = TaskDefinition(
+        title="Geschirr",
+        kind=TaskKind.AUFGABE,
+        recurrence=Recurrence.CUSTOM,
+        recurrence_interval_days=2,
+        difficulty_points=2,
+        required_assignees=1,
+        is_active=True,
+    )
+    db.session.add(definition)
+    db.session.flush()
+    step1 = TaskStep(task_definition_id=definition.id, step_order=0, name="Einräumen", day_offset=0)
+    step2 = TaskStep(task_definition_id=definition.id, step_order=1, name="Ausräumen", day_offset=1)
+    db.session.add_all([step1, step2])
+    db.session.flush()
+    occ = TaskOccurrence(
+        task_definition_id=definition.id,
+        period_start=date.today(),
+        period_end=date.today() + timedelta(days=1),
+        due_date=date.today(),
+        status=TaskStatus.OPEN,
+    )
+    db.session.add(occ)
+    db.session.flush()
+    assignment = TaskAssignment(
+        occurrence_id=occ.id, user_id=user.id, status=AssignmentStatus.OPEN
+    )
+    db.session.add(assignment)
+    db.session.flush()
+    db.session.add(TaskStepCompletion(assignment_id=assignment.id, step_id=step1.id))
+    db.session.commit()
+
+    client = app.test_client()
+    _login(client, user)
+    resp = client.post(
+        f"/tasks/{occ.id}/step/{step1.id}/undo",
+        headers={"HX-Request": "true"},
+    )
+    assert resp.status_code == 200
+    assert (
+        db.session.query(TaskStepCompletion)
+        .filter_by(assignment_id=assignment.id, step_id=step1.id)
+        .first()
+        is None
+    )
+
+
+def test_occurrence_card_shows_description_inline(app):
+    """Beschreibung wird unter dem Titel in der Karte gerendert."""
+    from app.domain.enums import AssignmentStatus, TaskStatus
+    from app.models.task import TaskAssignment
+
+    user = _make_user("Lina", role=Role.HAUSBEWOHNER)
+    definition = TaskDefinition(
+        title="Müll runter",
+        description="Bitte gelben Sack und Restmüll mitnehmen.",
+        kind=TaskKind.AUFGABE,
+        recurrence=Recurrence.NONE,
+        difficulty_points=2,
+        required_assignees=1,
+        is_active=True,
+    )
+    db.session.add(definition)
+    db.session.flush()
+    occ = TaskOccurrence(
+        task_definition_id=definition.id,
+        period_start=date.today() + timedelta(days=1),
+        period_end=date.today() + timedelta(days=1),
+        due_date=date.today() + timedelta(days=1),
+        status=TaskStatus.OPEN,
+    )
+    db.session.add(occ)
+    db.session.flush()
+    db.session.add(
+        TaskAssignment(occurrence_id=occ.id, user_id=user.id, status=AssignmentStatus.OPEN)
+    )
+    db.session.commit()
+
+    client = app.test_client()
+    _login(client, user)
+    resp = client.get("/tasks/")
+    body = resp.data.decode("utf-8", "replace")
+    assert "Bitte gelben Sack und Restmüll mitnehmen." in body

@@ -47,6 +47,7 @@ from app.models.task import (  # noqa: E402
     TaskDefinition,
     TaskDefinitionEligibleUser,
     TaskOccurrence,
+    TaskStep,
 )
 from app.models.user import User  # noqa: E402
 from app.services import scheduling  # noqa: E402
@@ -72,7 +73,11 @@ DEFINITIONS: list[dict] = [
         "recurrence_interval_days": 2,
         "difficulty": 2,
         "required": 1,
-        "description": "Abends anstellen, am naechsten Tag bis 14 Uhr ausraeumen.",
+        "description": "Abends einraeumen + starten, am naechsten Morgen ausraeumen.",
+        "steps": [
+            {"name": "Einraeumen + starten", "day_offset": 0, "time": time(19, 0)},
+            {"name": "Ausraeumen", "day_offset": 1, "time": time(9, 0)},
+        ],
     },
     {
         "title": "Toilette 1 (Check)",
@@ -263,6 +268,18 @@ def _create_definitions(creator: User) -> list[TaskDefinition]:
             created_by_id=creator.id,
         )
         db.session.add(d)
+        db.session.flush()
+        # Mehrteilige Schritte (z.B. Geschirrspueler Einraeumen + Ausraeumen).
+        for idx, step_spec in enumerate(spec.get("steps", [])):
+            db.session.add(
+                TaskStep(
+                    task_definition_id=d.id,
+                    step_order=idx,
+                    name=step_spec["name"],
+                    day_offset=step_spec.get("day_offset", 0),
+                    time_of_day=step_spec.get("time"),
+                )
+            )
         defs.append(d)
     db.session.flush()
     return defs

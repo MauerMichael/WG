@@ -3,6 +3,12 @@
 {% from "components/ui.html" import badge, task_type_border, task_type_badge %}
 {% set occ = assignment.occurrence %}
 {% set definition = occ.task_definition %}
+{# Max-Punkte = Anteil pro Assignee = round(difficulty / n_assignees), min 1. #}
+{% set _n = (occ.assignments | length) %}
+{% if _n < 1 %}{% set _n = 1 %}{% endif %}
+{% set max_points = ((definition.difficulty_points or 0) / _n) | round | int %}
+{% if max_points < 1 %}{% set max_points = 1 %}{% endif %}
+{% set current_points = assignment.points_earned if assignment.points_earned is not none else max_points %}
 <div id="review-row-{{ assignment.id }}"
      class="card-muted space-y-3 {{ task_type_border(definition) }}">
   <div class="flex flex-wrap items-start justify-between gap-3">
@@ -49,9 +55,38 @@
     </p>
   {% endif %}
 
-  {# Aktionen rechts gruppiert; Reject-Formular separat unten fuer die Notiz. #}
+  {# Teilpunkte-Formular: Hauswart vergibt 0..max Punkte. Auto-Strafe = Differenz. #}
+  <form method="post"
+        action="{{ url_for('hauswart.score', assignment_id=assignment.id) }}"
+        hx-post="{{ url_for('hauswart.score', assignment_id=assignment.id) }}"
+        hx-target="#review-row-{{ assignment.id }}"
+        hx-swap="outerHTML"
+        class="flex flex-col gap-2 sm:flex-row sm:items-end sm:gap-2">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="field min-w-[8rem] sm:w-32">
+      <label class="label text-[0.7rem]" for="pts-{{ assignment.id }}">
+        Punkte (0–{{ max_points }})
+      </label>
+      <input id="pts-{{ assignment.id }}"
+             class="input"
+             type="number"
+             min="0"
+             max="{{ max_points }}"
+             name="points_earned"
+             value="{{ current_points }}">
+    </div>
+    <input class="input sm:flex-1"
+           type="text"
+           name="note"
+           placeholder="Notiz (optional, z. B. 'nur halb gewischt')"
+           value="{{ assignment.review_note or '' }}">
+    <button type="submit" class="btn btn-primary btn-sm btn-block sm:w-auto">
+      {{ icon("check", "h-4 w-4") }}Bewerten
+    </button>
+  </form>
+
+  {# Schnell-Aktionen: Voll genehmigen / Für ihn abhaken (nur OPEN). #}
   <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end sm:gap-2">
-    {# Genehmigen — funktioniert auch zum Wechsel von einem früheren Verdikt. #}
     <form method="post"
           action="{{ url_for('hauswart.approve', assignment_id=assignment.id) }}"
           hx-post="{{ url_for('hauswart.approve', assignment_id=assignment.id) }}"
@@ -59,8 +94,8 @@
           hx-swap="outerHTML"
           class="w-full sm:w-auto">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <button type="submit" class="btn btn-accent btn-sm btn-block">
-        {{ icon("check", "h-4 w-4") }}Genehmigen
+      <button type="submit" class="btn btn-accent btn-sm btn-block" title="Voll genehmigen ({{ max_points }} Punkte)">
+        {{ icon("check", "h-4 w-4") }}Voll genehmigen
       </button>
     </form>
 

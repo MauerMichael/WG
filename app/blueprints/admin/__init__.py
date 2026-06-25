@@ -150,17 +150,25 @@ def approve(user_id: str):
     user.status = UserStatus.APPROVED
     ensure_joined_at(user)
     role_added = grant_role(user, Role.HAUSBEWOHNER)
+    # Frischer Bewohner kommt in den Pool: bestehende OPEN-Future-Zuweisungen
+    # auf den neuen Stand bringen (sonst kriegt er erst beim nächsten Cron was).
+    db.session.flush()
+    rebalanced = scheduling.rebalance_open_assignments(db.session)
     _audit(
         "user.approve",
         user,
         {
             "previous_status": str(previous_status),
             "role_added_default": role_added,
+            "rebalanced_swaps": rebalanced,
         },
     )
     db.session.commit()
     if not _is_htmx():
-        flash(f"{user.name} wurde freigeschaltet.", "success")
+        msg = f"{user.name} wurde freigeschaltet."
+        if rebalanced:
+            msg += f" {rebalanced} Aufgabe(n) neu verteilt."
+        flash(msg, "success")
     return _row_response(user)
 
 
@@ -197,8 +205,13 @@ def toggle_role(user_id: str):
 
     changed = False
     reassigned = 0
+    rebalanced = 0
     if action == "add":
         changed = grant_role(user, role)
+        # HAUSBEWOHNER-Rolle frisch vergeben: in den Verteilungs-Pool integrieren.
+        if changed and role == Role.HAUSBEWOHNER:
+            db.session.flush()
+            rebalanced = scheduling.rebalance_open_assignments(db.session)
     else:
         # Verhindern, dass sich Admin selbst die letzte Admin-Rolle entzieht
         # und niemand mehr Admin ist.
@@ -245,11 +258,17 @@ def toggle_role(user_id: str):
             "role": str(role),
             "changed": changed,
             "reassigned_occurrences": reassigned,
+            "rebalanced_swaps": rebalanced,
         },
     )
     db.session.commit()
-    if not _is_htmx() and reassigned:
-        flash(f"{reassigned} offene Aufgabe(n) neu verteilt.", "success")
+    if not _is_htmx() and (reassigned or rebalanced):
+        msg_parts = []
+        if reassigned:
+            msg_parts.append(f"{reassigned} offene Aufgabe(n) neu verteilt")
+        if rebalanced:
+            msg_parts.append(f"{rebalanced} Verteilungs-Swap(s)")
+        flash(", ".join(msg_parts) + ".", "success")
     return _row_response(user)
 
 
@@ -397,6 +416,11 @@ def new_user_create():
     for role in roles_to_grant:
         db.session.add(UserRole(user_id=user.id, role=role))
 
+    # Neuer Bewohner: bestehende OPEN-Future-Zuweisungen rebalancen, sodass
+    # er sofort eingebunden ist (nicht erst beim nächsten Cron).
+    db.session.flush()
+    rebalanced = scheduling.rebalance_open_assignments(db.session)
+
     _audit(
         "user.create",
         user,
@@ -404,6 +428,7 @@ def new_user_create():
             "username": username,
             "name": name,
             "roles": sorted(r.name for r in roles_to_grant),
+            "rebalanced_swaps": rebalanced,
         },
     )
     db.session.commit()

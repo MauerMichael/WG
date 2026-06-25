@@ -47,6 +47,18 @@ services:
       # Service: intern hoert die App auf 8000.
       - "traefik.http.services.wg.loadbalancer.server.port=8000"
 
+  # Cron-Container: faehrt die Wartungs-Skripte taeglich ~02:00 UTC.
+  # Beim Start direkt einmal, danach im 24h-Rhythmus (Drift-Catch-up nach
+  # Container-Restart). Sieht alle Env-Vars / DB-Credentials aus .env.
+  cron:
+    build: .
+    container_name: wg-cron
+    restart: unless-stopped
+    env_file: .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: ["python", "scripts/cron_loop.py"]
+
 networks:
   traefik:
     external: true

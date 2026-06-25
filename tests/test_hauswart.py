@@ -165,6 +165,299 @@ def test_hauswart_gets_200_on_index(app: Flask, client: FlaskClient) -> None:
     assert client.get("/hauswart/").status_code == 200
 
 
+def test_review_queue_count_returns_pending(app: Flask, client: FlaskClient) -> None:
+    from app.services.scheduling import review_queue_count
+
+    resident = _mk_user("Resi", roles=[Role.HAUSBEWOHNER])
+    # DIENST, Periode vorbei, PENDING -> zählt.
+    _mk_assignment(
+        resident,
+        kind=TaskKind.DIENST,
+        period_start=date.today() - timedelta(days=8),
+        period_end=date.today() - timedelta(days=1),
+        status=AssignmentStatus.DONE,
+        review_status=ReviewStatus.PENDING,
+        points_earned=4,
+    )
+    # AUFGABE überfällig OPEN -> zählt.
+    _mk_assignment(
+        resident,
+        kind=TaskKind.AUFGABE,
+        period_start=date.today() - timedelta(days=3),
+        period_end=date.today() - timedelta(days=2),
+        status=AssignmentStatus.OPEN,
+        review_status=ReviewStatus.PENDING,
+    )
+    # Schon APPROVED -> zählt NICHT.
+    _mk_assignment(
+        resident,
+        kind=TaskKind.DIENST,
+        period_start=date.today() - timedelta(days=8),
+        period_end=date.today() - timedelta(days=1),
+        status=AssignmentStatus.DONE,
+        review_status=ReviewStatus.APPROVED,
+        points_earned=4,
+    )
+    count = review_queue_count(db.session)
+    assert count == 2
+
+
+def test_pending_review_count_in_context(app: Flask, client: FlaskClient) -> None:
+    """Context-Processor injiziert pending_review_count im Hauswart-Login."""
+    hw = _mk_user("Heinz", roles=[Role.HAUSWART])
+    resident = _mk_user("Resi", roles=[Role.HAUSBEWOHNER])
+    _mk_assignment(
+        resident,
+        kind=TaskKind.DIENST,
+        period_start=date.today() - timedelta(days=8),
+        period_end=date.today() - timedelta(days=1),
+        status=AssignmentStatus.DONE,
+        review_status=ReviewStatus.PENDING,
+        points_earned=4,
+    )
+    _login(client, hw)
+    resp = client.get("/hauswart/")
+    assert resp.status_code == 200
+    # Badge im Nav sollte gerendert sein.
+    assert b"Verwaltung" in resp.data
+
+
+def test_score_full_points_acts_like_approve(app: Flask, client: FlaskClient) -> None:
+    hw = _mk_user("Heinz", roles=[Role.HAUSWART])
+    resident = _mk_user("Resi", roles=[Role.HAUSBEWOHNER])
+    assignment = _mk_assignment(
+        resident,
+        period_start=date.today() - timedelta(days=5),
+        period_end=date.today() - timedelta(days=1),
+        status=AssignmentStatus.DONE,
+        difficulty_points=4,
+    )
+    _login(client, hw)
+    resp = client.post(
+        f"/hauswart/{assignment.id}/score",
+        data={"points_earned": "4"},
+        headers={"HX-Request": "true"},
+    )
+    assert resp.status_code == 200
+    refreshed = db.session.get(TaskAssignment, assignment.id)
+    assert refreshed.review_status == ReviewStatus.APPROVED
+    assert refreshed.points_earned == 4
+    # Keine PENALTY-Karma.
+    penalties = (
+        db.session.query(KarmaEvent)
+        .filter_by(user_id=resident.id, kind=KarmaKind.PENALTY)
+        .count()
+    )
+    assert penalties == 0
+
+
+def test_score_zero_points_acts_like_reject(app: Flask, client: FlaskClient) -> None:
+    hw = _mk_user("Heinz", roles=[Role.HAUSWART])
+    resident = _mk_user("Resi", roles=[Role.HAUSBEWOHNER])
+    assignment = _mk_assignment(
+        resident,
+        period_start=date.today() - timedelta(days=5),
+        period_end=date.today() - timedelta(days=1),
+        status=AssignmentStatus.DONE,
+        difficulty_points=4,
+        points_earned=4,
+    )
+    _login(client, hw)
+    resp = client.post(
+        f"/hauswart/{assignment.id}/score",
+        data={"points_earned": "0", "note": "war Dreck"},
+        headers={"HX-Request": "true"},
+    )
+    assert resp.status_code == 200
+    refreshed = db.session.get(TaskAssignment, assignment.id)
+    assert refreshed.review_status == ReviewStatus.REJECTED
+    assert refreshed.points_earned == 0
+    assert refreshed.review_note == "war Dreck"
+    # PENALTY in voller Höhe.
+    penalty = (
+        db.session.query(KarmaEvent)
+        .filter_by(user_id=resident.id, kind=KarmaKind.PENALTY)
+        .first()
+    )
+    assert penalty is not None
+    assert penalty.points == 4
+
+
+def test_score_partial_points_creates_gap_penalty(app: Flask, client: FlaskClient) -> None:
+    """Teilpunkte: 2 von 4 → 2 Punkte gutgeschrieben + 2 Strafe."""
+    hw = _mk_user("Heinz", roles=[Role.HAUSWART])
+    resident = _mk_user("Resi", roles=[Role.HAUSBEWOHNER])
+    assignment = _mk_assignment(
+        resident,
+        period_start=date.today() - timedelta(days=5),
+        period_end=date.today() - timedelta(days=1),
+        status=AssignmentStatus.DONE,
+        difficulty_points=4,
+        points_earned=4,
+    )
+    _login(client, hw)
+    resp = client.post(
+        f"/hauswart/{assignment.id}/score",
+        data={"points_earned": "2", "note": "nur halb"},
+        headers={"HX-Request": "true"},
+    )
+    assert resp.status_code == 200
+    refreshed = db.session.get(TaskAssignment, assignment.id)
+    assert refreshed.review_status == ReviewStatus.APPROVED
+    assert refreshed.points_earned == 2
+    # PENALTY = 4 - 2 = 2.
+    penalty = (
+        db.session.query(KarmaEvent)
+        .filter_by(user_id=resident.id, kind=KarmaKind.PENALTY)
+        .first()
+    )
+    assert penalty is not None
+    assert penalty.points == 2
+
+
+def test_score_rescoring_removes_old_penalty(app: Flask, client: FlaskClient) -> None:
+    """Mehrfache Bewertung: alte PENALTY wird wegräumt, neue gebucht."""
+    hw = _mk_user("Heinz", roles=[Role.HAUSWART])
+    resident = _mk_user("Resi", roles=[Role.HAUSBEWOHNER])
+    assignment = _mk_assignment(
+        resident,
+        period_start=date.today() - timedelta(days=5),
+        period_end=date.today() - timedelta(days=1),
+        status=AssignmentStatus.DONE,
+        difficulty_points=4,
+        points_earned=4,
+    )
+    _login(client, hw)
+    # Erst: 0 Punkte → PENALTY 4.
+    client.post(
+        f"/hauswart/{assignment.id}/score",
+        data={"points_earned": "0"},
+        headers={"HX-Request": "true"},
+    )
+    # Dann: 3 Punkte → PENALTY 1.
+    client.post(
+        f"/hauswart/{assignment.id}/score",
+        data={"points_earned": "3"},
+        headers={"HX-Request": "true"},
+    )
+    penalties = (
+        db.session.query(KarmaEvent)
+        .filter_by(user_id=resident.id, kind=KarmaKind.PENALTY)
+        .all()
+    )
+    assert len(penalties) == 1
+    assert penalties[0].points == 1
+
+
+def test_archive_route_lists_reviewed_items(app: Flask, client: FlaskClient) -> None:
+    hw = _mk_user("Heinz", roles=[Role.HAUSWART])
+    resident = _mk_user("Resi", roles=[Role.HAUSBEWOHNER])
+    # Ein APPROVED-Item, ein REJECTED-Item, ein PENDING (sollte NICHT erscheinen).
+    a_approved = _mk_assignment(
+        resident,
+        kind=TaskKind.DIENST,
+        period_start=date.today() - timedelta(days=8),
+        period_end=date.today() - timedelta(days=1),
+        status=AssignmentStatus.DONE,
+        review_status=ReviewStatus.APPROVED,
+        points_earned=4,
+    )
+    a_approved.reviewed_at = datetime.now(UTC) - timedelta(days=1)
+    a_rejected = _mk_assignment(
+        resident,
+        kind=TaskKind.DIENST,
+        period_start=date.today() - timedelta(days=10),
+        period_end=date.today() - timedelta(days=3),
+        status=AssignmentStatus.DONE,
+        review_status=ReviewStatus.REJECTED,
+        points_earned=0,
+    )
+    a_rejected.reviewed_at = datetime.now(UTC) - timedelta(days=2)
+    _mk_assignment(
+        resident,
+        kind=TaskKind.DIENST,
+        period_start=date.today() - timedelta(days=5),
+        period_end=date.today() - timedelta(days=1),
+        status=AssignmentStatus.DONE,
+        review_status=ReviewStatus.PENDING,
+        points_earned=4,
+    )
+    db.session.commit()
+
+    _login(client, hw)
+    resp = client.get("/hauswart/archiv")
+    assert resp.status_code == 200
+    body = resp.data.decode("utf-8", "replace")
+    # Beide bewerteten Items sind im Archiv.
+    assert "genehmigt" in body or "Genehmigt" in body
+    assert "abgelehnt" in body or "Abgelehnt" in body
+
+
+def test_archive_filters_by_status(app: Flask, client: FlaskClient) -> None:
+    hw = _mk_user("Heinz", roles=[Role.HAUSWART])
+    resident = _mk_user("Resi", roles=[Role.HAUSBEWOHNER])
+    a_approved = _mk_assignment(
+        resident,
+        kind=TaskKind.DIENST,
+        period_start=date.today() - timedelta(days=8),
+        period_end=date.today() - timedelta(days=1),
+        status=AssignmentStatus.DONE,
+        review_status=ReviewStatus.APPROVED,
+        points_earned=4,
+        title="DienstA",
+    )
+    a_approved.reviewed_at = datetime.now(UTC) - timedelta(days=1)
+    a_rejected = _mk_assignment(
+        resident,
+        kind=TaskKind.DIENST,
+        period_start=date.today() - timedelta(days=10),
+        period_end=date.today() - timedelta(days=3),
+        status=AssignmentStatus.DONE,
+        review_status=ReviewStatus.REJECTED,
+        points_earned=0,
+        title="DienstR",
+    )
+    a_rejected.reviewed_at = datetime.now(UTC) - timedelta(days=2)
+    db.session.commit()
+
+    _login(client, hw)
+    resp = client.get("/hauswart/archiv?status=APPROVED")
+    body = resp.data.decode("utf-8", "replace")
+    assert "DienstA" in body
+    assert "DienstR" not in body
+
+
+def test_review_queue_count_excludes_excused_and_old_window(
+    app: Flask, client: FlaskClient
+) -> None:
+    """Excused-Items und außerhalb des 7-Tage-Fensters zählen nicht."""
+    from app.services.scheduling import review_queue_count
+
+    resident = _mk_user("Resi", roles=[Role.HAUSBEWOHNER])
+    # EXCUSED -> nicht gezählt.
+    _mk_assignment(
+        resident,
+        kind=TaskKind.DIENST,
+        period_start=date.today() - timedelta(days=5),
+        period_end=date.today() - timedelta(days=1),
+        status=AssignmentStatus.DONE,
+        review_status=ReviewStatus.EXCUSED,
+        points_earned=0,
+    )
+    # Außerhalb des 7-Tage-Fensters -> nicht gezählt.
+    _mk_assignment(
+        resident,
+        kind=TaskKind.DIENST,
+        period_start=date.today() - timedelta(days=30),
+        period_end=date.today() - timedelta(days=20),
+        status=AssignmentStatus.DONE,
+        review_status=ReviewStatus.PENDING,
+        points_earned=4,
+    )
+    count = review_queue_count(db.session)
+    assert count == 0
+
+
 def test_admin_gets_200_on_user_detail(app: Flask, client: FlaskClient) -> None:
     admin = _mk_user("Adi", roles=[Role.ADMIN])
     resident = _mk_user("Resi", roles=[Role.HAUSBEWOHNER])

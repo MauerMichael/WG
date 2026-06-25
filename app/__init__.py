@@ -136,4 +136,25 @@ def create_app(config_name: str = "dev") -> Flask:
         except Exception:
             return {"asset_version": ""}
 
+    # `pending_review_count` global verfügbar für das Nav-Badge an Verwaltung.
+    # Cheap COUNT-Query, nur ausgeführt wenn der User Hauswart/Admin ist.
+    from flask_login import current_user as _current_user
+
+    from app.blueprints.auth import user_has_any_role
+    from app.domain.enums import Role
+    from app.services import scheduling
+
+    @app.context_processor
+    def _inject_pending_review_count() -> dict:
+        try:
+            if not _current_user.is_authenticated:
+                return {"pending_review_count": 0}
+            if not user_has_any_role(_current_user, Role.HAUSWART, Role.ADMIN):
+                return {"pending_review_count": 0}
+            return {
+                "pending_review_count": scheduling.review_queue_count(db.session)
+            }
+        except Exception:
+            return {"pending_review_count": 0}
+
     return app

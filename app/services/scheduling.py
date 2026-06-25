@@ -570,6 +570,8 @@ def generate_occurrences(
                 # due_date = period_start: der Tag, an dem es dran ist (die
                 # Kalender-Ansicht zeigt Tasks auf ihrem Start-Tag).
                 due_date=period_start_value,
+                # Optionale Default-Uhrzeit aus der Definition übernehmen.
+                due_time=definition.default_due_time,
                 status=TaskStatus.OPEN,
             )
             session.add(occurrence)
@@ -720,9 +722,140 @@ def reassign_all_open_for(session: "Session", user: User) -> int:
     return reassign_open_overlap(session, user, date.min, date.max)
 
 
+def rebalance_open_assignments(
+    session: "Session", residents: list[User] | None = None
+) -> int:
+    """Verteilt OPEN-Future-Assignments fairer um, idempotent.
+
+    Wird bei Mitglieder-Wechsel (neuer Bewohner aufgenommen, Rolle gewechselt)
+    und im täglichen Cron-Catch-up aufgerufen. Swap-basiert: solange ``max-min
+    > 1`` zwischen den Bewohnern, schiebe eine Zuweisung vom Überlasteten zum
+    Unterlasteten — falls die Zielperson zur Occurrence eligibel ist und nicht
+    im Zeitraum absent.
+
+    Im Gegensatz zu ``generate_occurrences`` (das nur NEUE Perioden erzeugt)
+    greift diese Funktion in EXISTIERENDE OPEN-Occurrences ein. Dadurch wird
+    z.B. ein frisch aufgenommener Bewohner mit 0 Zuweisungen sofort in die
+    bestehende Verteilung integriert.
+
+    Schreibt nichts wenn schon ausgewogen. Idempotent: deterministische
+    Reihenfolge über sortierte User-IDs.
+
+    Gibt die Anzahl Swaps zurück.
+    """
+
+    today = _utcnow().date()
+    if residents is None:
+        residents = _approved_hausbewohner(session)
+    if not residents:
+        return 0
+
+    user_by_id = {u.id: u for u in residents}
+    user_ids = sorted(user_by_id.keys(), key=str)
+
+    stmt = (
+        select(TaskAssignment)
+        .join(TaskOccurrence, TaskAssignment.occurrence_id == TaskOccurrence.id)
+        .where(
+            TaskAssignment.status == AssignmentStatus.OPEN,
+            TaskOccurrence.period_end >= today,
+        )
+        .options(
+            selectinload(TaskAssignment.occurrence)
+            .selectinload(TaskOccurrence.task_definition)
+            .selectinload(TaskDefinition.eligible_users),
+            selectinload(TaskAssignment.occurrence).selectinload(
+                TaskOccurrence.assignments
+            ),
+        )
+    )
+    open_assigns = [
+        a for a in session.scalars(stmt) if a.user_id in user_by_id
+    ]
+    if not open_assigns:
+        return 0
+
+    absence_cache: dict[tuple[date, date], set] = {}
+
+    def absent_ids_for(occ: TaskOccurrence) -> set:
+        key = (occ.period_start, occ.period_end)
+        if key not in absence_cache:
+            absence_cache[key] = _absent_user_ids(
+                session, occ.period_start, occ.period_end
+            )
+        return absence_cache[key]
+
+    def is_eligible(user_id, occ: TaskOccurrence) -> bool:
+        definition = occ.task_definition
+        eligible = {link.user_id for link in (definition.eligible_users or [])}
+        if eligible and user_id not in eligible:
+            return False
+        if user_id in absent_ids_for(occ):
+            return False
+        return True
+
+    def counts() -> dict:
+        c = {uid: 0 for uid in user_ids}
+        for a in open_assigns:
+            c[a.user_id] = c.get(a.user_id, 0) + 1
+        return c
+
+    swaps = 0
+    for _ in range(500):  # Safety-Bound: realistisch endet's nach <20 Swaps.
+        c = counts()
+        # Deterministischer Tiebreak: bei gleicher Count die kleinere/größere
+        # User-ID gewinnt — sodass mehrfache Aufrufe identisch enden.
+        max_uid = max(c, key=lambda k: (c[k], str(k)))
+        min_uid = min(c, key=lambda k: (c[k], str(k)))
+        if c[max_uid] - c[min_uid] <= 1:
+            break
+        moved = False
+        for a in open_assigns:
+            if a.user_id != max_uid:
+                continue
+            if any(other.user_id == min_uid for other in a.occurrence.assignments):
+                continue
+            if not is_eligible(min_uid, a.occurrence):
+                continue
+            a.user_id = min_uid
+            moved = True
+            swaps += 1
+            break
+        if not moved:
+            break
+
+    if swaps:
+        session.flush()
+    return swaps
+
+
 # ---------------------------------------------------------------------------
 # Erledigung
 # ---------------------------------------------------------------------------
+
+
+def is_occurrence_step_complete(occurrence: TaskOccurrence) -> bool:
+    """Für mehrteilige Aufgaben: sind ALLE Schritte × ALLE Assignees fertig?
+
+    Wird in den Step-Done-Routen geprüft, um nach dem letzten Schritt
+    automatisch ``mark_done`` auf alle Assignments auszuführen. Bei einteiligen
+    Aufgaben (keine Steps) liefert die Funktion ``False`` — der reguläre
+    Erledigt-Flow greift dort wie gehabt.
+    """
+
+    definition: TaskDefinition = occurrence.task_definition
+    steps = definition.steps or []
+    if not steps:
+        return False
+    assignments = occurrence.assignments
+    if not assignments:
+        return False
+    for assignment in assignments:
+        done_step_ids = {c.step_id for c in (assignment.step_completions or [])}
+        for step in steps:
+            if step.id not in done_step_ids:
+                return False
+    return True
 
 
 def mark_done(
@@ -882,6 +1015,63 @@ def _remove_penalties_for(
 # ---------------------------------------------------------------------------
 
 
+def score_assignment(
+    session: "Session",
+    assignment: TaskAssignment,
+    reviewer: User,
+    points_earned: int,
+    note: str | None = None,
+) -> None:
+    """Hauswart bewertet eine Zuweisung mit Punkten von 0 bis voll.
+
+    Drei Fälle abhängig von ``points_earned`` (geklemmt auf
+    ``[0, _assignment_point_share(occurrence)]``):
+
+    * **voll**  → ``review_status = APPROVED``, full Punkte gutgeschrieben,
+      keine Strafe.
+    * **null**  → ``review_status = REJECTED``, 0 Punkte, PENALTY in voller
+      Höhe (= klassische Ablehnung wie vorher).
+    * **teilweise**  → ``review_status = APPROVED`` mit reduzierten Punkten,
+      **Auto-Strafe** in Höhe der Differenz ``full - points_earned`` als
+      PENALTY-Karma. So bedeutet „2 von 3 Punkte" zugleich 1 Strafe.
+
+    **Idempotenz beim Re-Score**: vor dem Buchen einer neuen PENALTY werden
+    alle bisherigen PENALTYs für diese Occurrence + diesen User entfernt,
+    damit mehrfache Anpassungen sauber bleiben.
+    """
+
+    full = _assignment_point_share(assignment.occurrence)
+    points_earned = max(0, min(int(points_earned), full))
+    gap = full - points_earned
+
+    assignment.reviewed_by_id = reviewer.id
+    assignment.reviewed_at = _utcnow()
+    assignment.review_note = note
+    assignment.points_earned = points_earned
+
+    if points_earned == 0:
+        assignment.review_status = ReviewStatus.REJECTED
+    else:
+        assignment.review_status = ReviewStatus.APPROVED
+
+    # Vorherige Strafe (falls vorhanden) wegräumen — verhindert Doppel-Strafe
+    # bei Re-Reviews.
+    _remove_penalties_for(session, assignment.user, assignment.occurrence)
+
+    if gap > 0:
+        record_penalty(
+            session,
+            assignment.user,
+            gap,
+            by_user=reviewer,
+            note=note,
+            occurrence=assignment.occurrence,
+        )
+
+    _rederive_occurrence_status(assignment.occurrence)
+    session.flush()
+
+
 def review_assignment(
     session: "Session",
     assignment: TaskAssignment,
@@ -889,45 +1079,21 @@ def review_assignment(
     approved: bool,
     note: str | None = None,
 ) -> None:
-    """Hauswart bestätigt oder lehnt eine erledigte Zuweisung ab.
+    """Backward-compat-Wrapper um ``score_assignment``.
 
-    Bei ``approved=False`` („schlecht gemacht"):
-
-    * Die Punkte werden entzogen (``points_earned=0``) — eine abgelehnte
-      (DONE, 0 Punkte) Zeile addiert nichts mehr zum positiven Score.
-    * Zusätzlich wird ein PENALTY-Karma-Event in Höhe der entgangenen Punkte
-      (Anteil pro Assignee) gebucht — Negativ-Karma, das den Score unter 0
-      drücken kann und die Person öfter drankommen lässt.
-
-    Der Penalty wird nur beim *Übergang* nach REJECTED gebucht (nicht bei einer
-    erneuten Ablehnung), damit ein zweimaliges Review nicht doppelt bestraft.
-    Eine spätere Re-Approval refundet den Penalty nicht (seltener Sonderfall).
+    ``approved=True`` ≙ volle Punkte; ``approved=False`` ≙ 0 Punkte.
+    Wird intern noch von Tests und den Shortcut-Routen approve/reject
+    aufgerufen.
     """
 
-    was_rejected = assignment.review_status == ReviewStatus.REJECTED
-
-    assignment.review_status = (
-        ReviewStatus.APPROVED if approved else ReviewStatus.REJECTED
+    full = _assignment_point_share(assignment.occurrence)
+    score_assignment(
+        session,
+        assignment,
+        reviewer,
+        points_earned=full if approved else 0,
+        note=note,
     )
-    assignment.reviewed_by_id = reviewer.id
-    assignment.reviewed_at = _utcnow()
-    assignment.review_note = note
-
-    if not approved:
-        penalty_points = _assignment_point_share(assignment.occurrence)
-        assignment.points_earned = 0
-        if not was_rejected:
-            record_penalty(
-                session,
-                assignment.user,
-                penalty_points,
-                by_user=reviewer,
-                note=note,
-                occurrence=assignment.occurrence,
-            )
-
-    _rederive_occurrence_status(assignment.occurrence)
-    session.flush()
 
 
 def hauswart_mark_done(
@@ -1029,6 +1195,107 @@ def review_queue(session: "Session", days: int = 7) -> list[TaskAssignment]:
         .order_by(TaskOccurrence.period_end, TaskAssignment.user_id)
     )
     return list(session.scalars(stmt))
+
+
+def review_archive(
+    session: "Session",
+    *,
+    user_id: uuid.UUID | None = None,
+    from_date: date | None = None,
+    to_date: date | None = None,
+    status: ReviewStatus | None = None,
+    days: int = 90,
+) -> list[TaskAssignment]:
+    """Archiv aller bewerteten Assignments (APPROVED / REJECTED / EXCUSED).
+
+    Im Gegensatz zu ``review_queue`` zeigt das Archiv die Items NACH der
+    Hauswart-Entscheidung. Default-Fenster: letzte ``days`` Tage über
+    ``reviewed_at``. Optional filterbar nach Bewohner / Datums-Range / Status.
+
+    Sortiert nach ``reviewed_at`` desc (neueste zuerst).
+    """
+
+    now = _utcnow()
+    default_from = now - timedelta(days=days)
+
+    stmt = (
+        select(TaskAssignment)
+        .join(TaskOccurrence, TaskAssignment.occurrence_id == TaskOccurrence.id)
+        .join(
+            TaskDefinition,
+            TaskOccurrence.task_definition_id == TaskDefinition.id,
+        )
+        .where(
+            TaskAssignment.review_status.in_(
+                [ReviewStatus.APPROVED, ReviewStatus.REJECTED, ReviewStatus.EXCUSED]
+            ),
+            TaskAssignment.reviewed_at.is_not(None),
+        )
+        .options(
+            selectinload(TaskAssignment.occurrence).selectinload(
+                TaskOccurrence.task_definition
+            ),
+            selectinload(TaskAssignment.user),
+        )
+        .order_by(TaskAssignment.reviewed_at.desc())
+    )
+
+    if user_id is not None:
+        stmt = stmt.where(TaskAssignment.user_id == user_id)
+    if status is not None:
+        stmt = stmt.where(TaskAssignment.review_status == status)
+    if from_date is not None:
+        stmt = stmt.where(
+            TaskAssignment.reviewed_at >= datetime.combine(from_date, datetime.min.time(), tzinfo=timezone.utc)
+        )
+    elif from_date is None and to_date is None and user_id is None and status is None:
+        # Default-Fenster nur greift, wenn KEINE Filter gesetzt sind.
+        stmt = stmt.where(TaskAssignment.reviewed_at >= default_from)
+    if to_date is not None:
+        stmt = stmt.where(
+            TaskAssignment.reviewed_at <= datetime.combine(to_date, datetime.max.time(), tzinfo=timezone.utc)
+        )
+
+    return list(session.scalars(stmt))
+
+
+def review_queue_count(session: "Session", days: int = 7) -> int:
+    """COUNT-only-Variante von ``review_queue`` für das Nav-Badge.
+
+    Eine leichtgewichtige Aggregat-Query (kein Object-Loading, kein
+    eager-Load), damit der Context-Processor in jedem Request quasi-frei
+    aufrufbar ist.
+    """
+
+    today = _utcnow().date()
+    window_start = today - timedelta(days=days)
+
+    needs_review = or_(
+        and_(
+            TaskDefinition.kind == TaskKind.DIENST,
+            TaskOccurrence.period_end <= today,
+            TaskAssignment.review_status == ReviewStatus.PENDING,
+        ),
+        and_(
+            TaskOccurrence.period_end < today,
+            TaskAssignment.status == AssignmentStatus.OPEN,
+        ),
+    )
+
+    stmt = (
+        select(func.count())
+        .select_from(TaskAssignment)
+        .join(TaskOccurrence, TaskAssignment.occurrence_id == TaskOccurrence.id)
+        .join(
+            TaskDefinition,
+            TaskOccurrence.task_definition_id == TaskDefinition.id,
+        )
+        .where(
+            TaskOccurrence.period_end >= window_start,
+            needs_review,
+        )
+    )
+    return int(session.scalar(stmt) or 0)
 
 
 def user_review_items(

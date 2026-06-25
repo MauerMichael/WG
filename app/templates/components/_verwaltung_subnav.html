@@ -1,10 +1,23 @@
 {#
-  Sub-Navigation des "Verwaltung"-Bereichs (Hauswart + Admin + Extra-Pruefung).
-  Aktiv-Markierung ueber request.blueprint. Standalone einbindbar.
+  Sub-Navigation des "Verwaltung"-Bereichs (Hauswart-Queue + Archiv + Admin +
+  Extra-Pruefung). Aktiv-Markierung via request.endpoint, weil Queue + Archiv
+  beide unter dem `hauswart`-Blueprint leben.
 #}
 {% from "components/ui.html" import sub_nav %}
+{% set _ep = request.endpoint or '' %}
+{% set _active = 'queue' %}
+{% if _ep == 'hauswart.archive' %}
+  {% set _active = 'archive' %}
+{% elif _ep.startswith('hauswart.') %}
+  {% set _active = 'queue' %}
+{% elif _ep.startswith('admin.') %}
+  {% set _active = 'admin' %}
+{% elif _ep.startswith('extras.') %}
+  {% set _active = 'extras' %}
+{% endif %}
 {{ sub_nav([
-  (url_for('hauswart.index'), 'hauswart', 'Aufgaben prüfen'),
-  (url_for('admin.users'),    'admin',    'Nutzer'),
-  (url_for('extras.index'),   'extras',   'Extra-Leistungen'),
-], request.blueprint) }}
+  (url_for('hauswart.index'),   'queue',   'Aufgaben prüfen'),
+  (url_for('hauswart.archive'), 'archive', 'Archiv'),
+  (url_for('admin.users'),      'admin',   'Nutzer'),
+  (url_for('extras.index'),     'extras',  'Extra-Leistungen'),
+], _active) }}

@@ -36,17 +36,70 @@
           {{ definition.title }}
         </a>
       </p>
+      {% if definition.description %}
+        <p class="text-sm text-slate-600 whitespace-pre-line">{{ definition.description }}</p>
+      {% endif %}
       <p class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
         <span class="inline-flex items-center gap-1">
           {{ icon("calendar", "h-3.5 w-3.5") }}
-          Fällig am {{ occurrence.due_date.strftime('%d.%m.%Y') }}
+          Fällig am {{ occurrence.due_date.strftime('%d.%m.%Y') }}{% if occurrence.due_time %} · {{ occurrence.due_time.strftime('%H:%M') }} Uhr{% endif %}
         </span>
-        <span class="text-slate-300">·</span>
-        <span class="inline-flex items-center gap-1">
-          {{ icon("clock", "h-3.5 w-3.5") }}
-          {{ occurrence.period_start.strftime('%d.%m.') }}–{{ occurrence.period_end.strftime('%d.%m.%Y') }}
-        </span>
+        {# Dienste = Zeitraum, AUFGABE = Punkt-in-der-Zeit (kein Range). #}
+        {% if definition.kind.value == "DIENST" and occurrence.period_end != occurrence.period_start %}
+          <span class="text-slate-300">·</span>
+          <span class="inline-flex items-center gap-1">
+            {{ icon("clock", "h-3.5 w-3.5") }}
+            {{ occurrence.period_start.strftime('%d.%m.') }}–{{ occurrence.period_end.strftime('%d.%m.%Y') }}
+          </span>
+        {% endif %}
       </p>
+
+      {# Schritte: bei mehrteiligen Aufgaben Liste der Schritte mit Status. #}
+      {% if definition.steps %}
+        {% set done_step_ids_ns = namespace(set=[]) %}
+        {% if own_assignment %}
+          {% for c in own_assignment.step_completions %}{% set _ = done_step_ids_ns.set.append(c.step_id) %}{% endfor %}
+        {% endif %}
+        <ul class="mt-2 space-y-1.5">
+          {% for step in definition.steps %}
+            {% set is_done = step.id in done_step_ids_ns.set %}
+            <li class="flex items-center justify-between gap-2 rounded-lg bg-white px-2.5 py-1.5 text-xs ring-1 ring-brand-50">
+              <span class="flex items-center gap-2 {% if is_done %}text-slate-400 line-through{% else %}text-slate-700{% endif %}">
+                {% if is_done %}{{ icon("check", "h-3.5 w-3.5 text-emerald-500") }}{% else %}<span class="h-3.5 w-3.5 rounded border border-slate-300"></span>{% endif %}
+                <span class="font-semibold">Schritt {{ loop.index }}: {{ step.name }}</span>
+                <span class="text-slate-400">
+                  · Tag +{{ step.day_offset }}{% if step.time_of_day %} · {{ step.time_of_day.strftime('%H:%M') }}{% endif %}
+                </span>
+              </span>
+              {% if own_assignment and own_assignment.status.value == "OPEN" and today and today >= occurrence.period_start %}
+                {% if is_done %}
+                  <form method="post"
+                        action="{{ url_for('tasks.step_undo', occurrence_id=occurrence.id, step_id=step.id) }}"
+                        hx-post="{{ url_for('tasks.step_undo', occurrence_id=occurrence.id, step_id=step.id) }}"
+                        hx-target="#occurrence-{{ occurrence.id }}"
+                        hx-swap="outerHTML">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-ghost btn-sm">
+                      {{ icon("undo", "h-3.5 w-3.5") }}
+                    </button>
+                  </form>
+                {% else %}
+                  <form method="post"
+                        action="{{ url_for('tasks.step_done', occurrence_id=occurrence.id, step_id=step.id) }}"
+                        hx-post="{{ url_for('tasks.step_done', occurrence_id=occurrence.id, step_id=step.id) }}"
+                        hx-target="#occurrence-{{ occurrence.id }}"
+                        hx-swap="outerHTML">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-accent btn-sm">
+                      {{ icon("check", "h-3.5 w-3.5") }}
+                    </button>
+                  </form>
+                {% endif %}
+              {% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+      {% endif %}
       <div class="flex flex-wrap items-center gap-1.5 text-xs text-slate-600">
         <span class="inline-flex items-center gap-1 font-bold text-slate-500">
           {{ icon("users", "h-3.5 w-3.5") }}Zugewiesen:
@@ -76,6 +129,8 @@
         {% if definition.kind.value == "DIENST" %}
           {# Dienste werden nicht vom Bewohner abgehakt — Hauswart prüft am Periodenende. #}
           <span class="badge badge-neutral">Hauswart prüft am {{ occurrence.period_end.strftime('%d.%m.') }}</span>
+        {% elif definition.steps %}
+          {# Mehrteilige Aufgabe: kein „Erledigt"-Button, Schritte tracken den Fortschritt. #}
         {% elif today and today >= occurrence.period_start %}
           {# Erledigt-Button erst ab Periodenstart (Future-Lock). #}
           <form hx-post="{{ url_for('tasks.mark_done', occurrence_id=occurrence.id) }}"

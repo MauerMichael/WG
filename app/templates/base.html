@@ -73,6 +73,9 @@
           <a href="{{ url_for(endpoint) }}"
              class="nav-link {{ 'nav-link-active' if bp in match_bps }}">
             {{ icon(ic, "h-4 w-4") }}<span>{{ label }}</span>
+            {% if blueprint == 'hauswart' and pending_review_count and pending_review_count > 0 %}
+              <span class="ml-1 inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-rose-500 px-1.5 text-[0.7rem] font-extrabold text-white">{{ pending_review_count }}</span>
+            {% endif %}
           </a>
         </li>
         {% endfor %}
@@ -110,8 +113,11 @@
   <nav class="fixed inset-x-0 bottom-0 z-30 flex border-t border-brand-100 bg-white/95 backdrop-blur md:hidden"
        style="padding-bottom: env(safe-area-inset-bottom);">
     {% for endpoint, blueprint, label, ic, match_bps in nav_items %}
-    <a href="{{ url_for(endpoint) }}" class="tab {{ 'tab-active' if bp in match_bps }}">
+    <a href="{{ url_for(endpoint) }}" class="tab {{ 'tab-active' if bp in match_bps }} relative">
       {{ icon(ic, "h-5 w-5") }}<span>{{ label }}</span>
+      {% if blueprint == 'hauswart' and pending_review_count and pending_review_count > 0 %}
+        <span class="absolute right-3 top-1 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-rose-500 px-1 text-[0.65rem] font-extrabold text-white">{{ pending_review_count }}</span>
+      {% endif %}
     </a>
     {% endfor %}
   </nav>

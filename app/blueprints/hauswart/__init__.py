@@ -26,7 +26,7 @@ from flask import (
 from flask_login import current_user, login_required
 
 from app.blueprints.auth import require_admin_or_hauswart, user_has_any_role
-from app.domain.enums import Recurrence, Role, TaskKind, UserStatus
+from app.domain.enums import Recurrence, ReviewStatus, Role, TaskKind, UserStatus
 from app.extensions import db
 from app.models.task import TaskAssignment, TaskDefinition
 from app.models.user import User, UserRole
@@ -34,8 +34,10 @@ from app.services.scheduling import (
     effective_scores_for,
     excuse_assignment,
     hauswart_mark_done,
+    review_archive,
     review_assignment,
     review_queue,
+    score_assignment,
     user_review_items,
     user_task_stats,
 )
@@ -186,6 +188,54 @@ def index():
     )
 
 
+@bp.route("/archiv")
+@login_required
+def archive():
+    """Archiv der bewerteten Aufgaben (APPROVED / REJECTED / EXCUSED).
+
+    Filter: Bewohner, Status, Datums-Range. Wenn keine Filter gesetzt,
+    Default-Fenster letzte 90 Tage.
+    """
+    require_admin_or_hauswart()
+
+    from datetime import date as _date
+
+    selected_user_id = _parse_user_id(request.args.get("user_id"))
+    raw_status = (request.args.get("status") or "").strip().upper()
+    selected_status = None
+    if raw_status in {"APPROVED", "REJECTED", "EXCUSED"}:
+        selected_status = ReviewStatus[raw_status]
+
+    def _parse_date(raw):
+        try:
+            return _date.fromisoformat(raw) if raw else None
+        except (TypeError, ValueError):
+            return None
+
+    from_date = _parse_date(request.args.get("from"))
+    to_date = _parse_date(request.args.get("to"))
+
+    items = review_archive(
+        db.session,
+        user_id=selected_user_id,
+        from_date=from_date,
+        to_date=to_date,
+        status=selected_status,
+    )
+
+    residents = _approved_residents()
+
+    return render_template(
+        "hauswart/archive.html",
+        items=items,
+        residents=residents,
+        selected_user_id=selected_user_id,
+        selected_status=raw_status,
+        from_date=from_date.isoformat() if from_date else "",
+        to_date=to_date.isoformat() if to_date else "",
+    )
+
+
 @bp.route("/user/<uuid:user_id>")
 @login_required
 def user_detail(user_id):
@@ -211,6 +261,24 @@ def approve(assignment_id):
     require_admin_or_hauswart()
     assignment = _get_assignment_or_404(assignment_id)
     review_assignment(db.session, assignment, current_user, approved=True)
+    db.session.commit()
+    return _row_response(assignment)
+
+
+@bp.route("/<uuid:assignment_id>/score", methods=["POST"])
+@login_required
+def score(assignment_id):
+    """Hauswart vergibt Teilpunkte (0..max). Auto-Strafe = Differenz."""
+    require_admin_or_hauswart()
+    assignment = _get_assignment_or_404(assignment_id)
+    try:
+        points = int(request.form.get("points_earned", "").strip())
+    except (TypeError, ValueError):
+        abort(400)
+    note = (request.form.get("note") or "").strip() or None
+    score_assignment(
+        db.session, assignment, current_user, points_earned=points, note=note
+    )
     db.session.commit()
     return _row_response(assignment)
 
