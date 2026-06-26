@@ -726,7 +726,12 @@ def test_hauswart_mark_done_sets_done_approved_and_points(session):
 # ---------------------------------------------------------------------------
 
 
-def test_review_queue_includes_dienst_and_overdue_open_excludes_done_aufgabe(session):
+def test_review_queue_includes_dienst_overdue_open_and_done_aufgabe(session):
+    """Neue Semantik: jede DONE+PENDING-Zuweisung muss in der Queue sein.
+
+    AUFGABE soll nicht mehr ungeprueft durchwinkten — Hauswart entscheidet
+    bewusst ueber jede Erledigung (Teilpunkte / voll / ablehnen).
+    """
     user = _make_user(session, "Bewohner", joined_days_ago=200)
     today = date.today()
 
@@ -756,7 +761,8 @@ def test_review_queue_includes_dienst_and_overdue_open_excludes_done_aufgabe(ses
         session, overdue_occ, user, status=AssignmentStatus.OPEN
     )
 
-    # 3) Einfache abgehakte AUFGABE, nicht überfällig -> NICHT in der Queue.
+    # 3) Abgehakte AUFGABE (DONE+PENDING) -> JETZT auch in der Queue,
+    # damit der Hauswart sie bewerten kann.
     done_def = _make_definition(session, title="Kehren", kind=TaskKind.AUFGABE)
     done_occ = _make_occurrence(
         session, done_def, period_start=today, period_length=1
@@ -776,7 +782,7 @@ def test_review_queue_includes_dienst_and_overdue_open_excludes_done_aufgabe(ses
 
     assert dienst_a.id in queue_ids
     assert overdue_a.id in queue_ids
-    assert done_a.id not in queue_ids
+    assert done_a.id in queue_ids
 
 
 # ---------------------------------------------------------------------------

@@ -70,9 +70,9 @@ class BaseConfig:
     # Per .env-Eintrag ``HAUSWART_REPORT_NOTICE=...`` ueberschreibbar.
     HAUSWART_REPORT_NOTICE: str = os.environ.get(
         "HAUSWART_REPORT_NOTICE",
-        "Nach der Kontrolle bitte kurz eine WhatsApp an Michael schicken — "
-        "basierend auf deiner Nachricht entscheide ich, ob der Dienst als "
-        "erledigt zaehlt.",
+        "Nach jeder Kontrolle bitte kurz eine WhatsApp an Michael schicken — "
+        "auch wenn alles in Ordnung ist. Eine Nachricht wie 'alles okay' "
+        "reicht. Ohne Meldung gilt der Dienst als nicht erledigt.",
     )
 
 

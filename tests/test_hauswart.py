@@ -165,6 +165,35 @@ def test_hauswart_gets_200_on_index(app: Flask, client: FlaskClient) -> None:
     assert client.get("/hauswart/").status_code == 200
 
 
+def test_review_queue_shows_done_aufgabe_pending(
+    app: Flask, client: FlaskClient
+) -> None:
+    """Eine abgehakte AUFGABE muss sofort im Hauswart-Review auftauchen.
+
+    Regression gegen den ursprünglichen Bug: AUFGABE+DONE+PENDING wurde von
+    der Queue ignoriert (nur DIENST-nach-Periodenende war drin), sodass der
+    Hauswart die Erledigung weder genehmigen noch ablehnen konnte.
+    """
+    from app.services.scheduling import review_queue, review_queue_count
+
+    resident = _mk_user("Bishal", roles=[Role.HAUSBEWOHNER])
+    assignment = _mk_assignment(
+        resident,
+        kind=TaskKind.AUFGABE,
+        period_start=date.today() - timedelta(days=1),
+        period_end=date.today() - timedelta(days=1),
+        status=AssignmentStatus.DONE,
+        review_status=ReviewStatus.PENDING,
+        difficulty_points=2,
+        points_earned=2,
+        title="Bohrmaschine zurueck",
+    )
+
+    queue = review_queue(db.session)
+    assert any(a.id == assignment.id for a in queue)
+    assert review_queue_count(db.session) >= 1
+
+
 def test_review_queue_count_returns_pending(app: Flask, client: FlaskClient) -> None:
     from app.services.scheduling import review_queue_count
 
@@ -708,9 +737,14 @@ def test_mutation_404_for_unknown_assignment(app: Flask, client: FlaskClient) ->
 # ---------------------------------------------------------------------------
 
 
-def test_index_shows_past_dienst_not_plain_done_aufgabe(
+def test_index_shows_past_dienst_and_done_aufgabe(
     app: Flask, client: FlaskClient
 ) -> None:
+    """Sowohl beendeter Dienst als auch abgehakte Aufgabe muss in die Queue.
+
+    Hauswart entscheidet bewusst ueber jede Erledigung — AUFGABEN duerfen
+    nicht mehr automatisch ohne Kontrolle durchwinkten.
+    """
     hw = _mk_user("Heinz", roles=[Role.HAUSWART])
     resident = _mk_user("Resi", roles=[Role.HAUSBEWOHNER])
 
@@ -727,7 +761,8 @@ def test_index_shows_past_dienst_not_plain_done_aufgabe(
     dienst_def.title = "Muelldienst"
     db.session.commit()
 
-    # Eine simple abgehakte Aufgabe → darf NICHT in der Queue erscheinen.
+    # Eine abgehakte Aufgabe (DONE+PENDING) → muss EBENFALLS in der Queue
+    # erscheinen, sonst kann der Hauswart sie nicht kontrollieren.
     aufgabe = _mk_assignment(
         resident,
         kind=TaskKind.AUFGABE,
@@ -743,7 +778,7 @@ def test_index_shows_past_dienst_not_plain_done_aufgabe(
     _login(client, hw)
     body = client.get("/hauswart/").get_data(as_text=True)
     assert "Muelldienst" in body
-    assert "Schnellaufgabe" not in body
+    assert "Schnellaufgabe" in body
 
 
 def test_index_shows_overdue_unclaimed_aufgabe(app: Flask, client: FlaskClient) -> None:

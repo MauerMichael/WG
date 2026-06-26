@@ -1149,15 +1149,18 @@ def excuse_assignment(
 def review_queue(session: "Session", days: int = 7) -> list[TaskAssignment]:
     """Assignments, die ein Hauswart-Review brauchen.
 
-    Schlanke Queue (vgl. Plan): nur
-    * Dienste, deren Periode beendet ist und noch PENDING sind, ODER
-    * überfällig-unbeanspruchte Einträge (Periode vorbei, Assignment OPEN).
+    Queue zeigt:
+    * **JEDE** abgehakte Zuweisung (``status == DONE``) mit noch ausstehendem
+      Review (``review_status == PENDING``) — unabhängig von Aufgaben-Typ und
+      Periodenende. Der Hauswart soll bewusst über jede Erledigung
+      entscheiden, statt dass AUFGABEN automatisch durchwinkten.
+    * **OPEN überfällig** — Periode vorbei, Assignment unbeansprucht.
 
-    Einfache abgehakte Aufgaben (DONE) gelten automatisch als ok und tauchen
-    hier NICHT auf. Begrenzt auf das ``days``-Fenster
-    (``period_end >= today - days``), damit die Queue beschränkt bleibt.
-    Eager-load occurrence -> definition sowie user. Sortierung:
-    ``period_end`` asc, dann ``user_id``.
+    Begrenzt auf das ``days``-Fenster (``period_end >= today - days``), damit
+    die Queue beschränkt bleibt: ältere DONE-Einträge fallen aus der Queue und
+    gelten implizit als ok (``user_task_stats`` zählt sie weiterhin). Eager-
+    load occurrence -> definition sowie user. Sortierung: ``period_end`` asc,
+    dann ``user_id``.
     """
 
     today = _utcnow().date()
@@ -1165,8 +1168,7 @@ def review_queue(session: "Session", days: int = 7) -> list[TaskAssignment]:
 
     needs_review = or_(
         and_(
-            TaskDefinition.kind == TaskKind.DIENST,
-            TaskOccurrence.period_end <= today,
+            TaskAssignment.status == AssignmentStatus.DONE,
             TaskAssignment.review_status == ReviewStatus.PENDING,
         ),
         and_(
@@ -1264,7 +1266,8 @@ def review_queue_count(session: "Session", days: int = 7) -> int:
 
     Eine leichtgewichtige Aggregat-Query (kein Object-Loading, kein
     eager-Load), damit der Context-Processor in jedem Request quasi-frei
-    aufrufbar ist.
+    aufrufbar ist. ``needs_review``-Klausel mirror-identisch zu
+    ``review_queue`` — sonst läuft Badge-Zahl und Queue-Inhalt auseinander.
     """
 
     today = _utcnow().date()
@@ -1272,8 +1275,7 @@ def review_queue_count(session: "Session", days: int = 7) -> int:
 
     needs_review = or_(
         and_(
-            TaskDefinition.kind == TaskKind.DIENST,
-            TaskOccurrence.period_end <= today,
+            TaskAssignment.status == AssignmentStatus.DONE,
             TaskAssignment.review_status == ReviewStatus.PENDING,
         ),
         and_(
