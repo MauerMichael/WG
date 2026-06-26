@@ -35,9 +35,9 @@ from app.models.task import TaskDefinition  # noqa: E402
 # Standard-Footer fuer Kontroll-Dienste: explizit auch dann melden, wenn alles
 # in Ordnung war — sonst kann der Hauswart's nicht entscheiden.
 _REPORT_REMINDER = (
-    " Nach der Kontrolle JEDES MAL Michael per WhatsApp melden — auch wenn "
-    "alles in Ordnung ist (z.B. 'alles okay'). Ohne Meldung gilt der Dienst "
-    "als nicht erledigt."
+    " Nach der Kontrolle JEDES MAL den Hauswart per WhatsApp melden — auch "
+    "wenn alles in Ordnung ist (z.B. 'alles okay'). Ohne Meldung gilt der "
+    "Dienst als nicht erledigt."
 )
 
 
